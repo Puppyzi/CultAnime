@@ -1,0 +1,18 @@
+services:
+  cultanime:
+    build: .
+    container_name: cultanime
+    environment:
+      - TZ=Etc/UTC
+      - MEDIA_ROOT=/anime
+      # If you need the container to run as a specific user to fix TrueNAS permissions:
+      # - PUID=1000
+      # - PGID=1000
+    volumes:
+      # Map the Fast SSD for the SQLite database and config
+      - /mnt/Fast_SSD/cultanime_data:/app/data
+      # Map the Storage HDD for the anime media files (Read-Only to protect your files)
+      - /mnt/Storage_HDD/media/anime:/anime:ro
+    ports:
+      - 3000:3000
+    restart: unless-stopped

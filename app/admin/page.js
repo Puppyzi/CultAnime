@@ -1,0 +1,539 @@
+'use client';
+import { useState, useEffect } from 'react';
+
+export default function AdminPage() {
+  const [tab, setTab] = useState('add');
+  const [animeList, setAnimeList] = useState([]);
+  const [selectedAnime, setSelectedAnime] = useState(null);
+  const [anilistQuery, setAnilistQuery] = useState('');
+  const [anilistResults, setAnilistResults] = useState([]);
+  const [toast, setToast] = useState(null);
+
+  // Sync state
+  const [syncPreview, setSyncPreview] = useState(null);
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncResults, setSyncResults] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+
+  // Form state
+  const [form, setForm] = useState({
+    title: '', title_romaji: '', title_english: '', description: '',
+    cover_image: '', banner_image: '', genres: '', status: '',
+    episodes_total: '', rating: '', year: '', season: '', format: '', anilist_id: '',
+  });
+
+  // Episode form
+  const [epForm, setEpForm] = useState({ anime_id: '', episode_number: '', title: '', file_path: '' });
+
+  useEffect(() => { loadAnimeList(); }, []);
+
+  async function loadAnimeList() {
+    const res = await fetch('/api/anime?limit=100');
+    const data = await res.json();
+    setAnimeList(data.anime || []);
+  }
+
+  function showToast(msg, type = 'success') {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  async function searchAnilist() {
+    if (!anilistQuery.trim()) return;
+    const res = await fetch(`/api/admin/anilist?q=${encodeURIComponent(anilistQuery)}`);
+    const data = await res.json();
+    setAnilistResults(data.results || []);
+  }
+
+  async function importFromAnilist(anilistId) {
+    const res = await fetch('/api/admin/anilist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ anilist_id: anilistId }),
+    });
+    const data = await res.json();
+    if (data.anime) {
+      setForm({
+        ...data.anime,
+        genres: Array.isArray(JSON.parse(data.anime.genres || '[]'))
+          ? JSON.parse(data.anime.genres).join(', ') : data.anime.genres,
+        episodes_total: data.anime.episodes_total || '',
+        rating: data.anime.rating || '',
+        year: data.anime.year || '',
+      });
+      setAnilistResults([]);
+      showToast('Metadata imported from AniList!');
+    }
+  }
+
+  async function saveAnime(e) {
+    e.preventDefault();
+    const body = {
+      ...form,
+      genres: JSON.stringify(form.genres.split(',').map(g => g.trim()).filter(Boolean)),
+      episodes_total: form.episodes_total ? parseInt(form.episodes_total) : null,
+      rating: form.rating ? parseInt(form.rating) : null,
+      year: form.year ? parseInt(form.year) : null,
+      anilist_id: form.anilist_id ? parseInt(form.anilist_id) : null,
+    };
+
+    const res = await fetch('/api/admin/anime', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Anime added successfully!');
+      setForm({ title: '', title_romaji: '', title_english: '', description: '',
+        cover_image: '', banner_image: '', genres: '', status: '',
+        episodes_total: '', rating: '', year: '', season: '', format: '', anilist_id: '' });
+      loadAnimeList();
+    } else {
+      showToast(data.error || 'Error adding anime', 'error');
+    }
+  }
+
+  async function deleteAnime(id) {
+    if (!confirm('Delete this anime and all its episodes?')) return;
+    await fetch('/api/admin/anime', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    showToast('Anime deleted');
+    loadAnimeList();
+    if (selectedAnime?.id === id) setSelectedAnime(null);
+  }
+
+  async function addEpisode(e) {
+    e.preventDefault();
+    const res = await fetch('/api/admin/episodes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        anime_id: parseInt(epForm.anime_id),
+        episode_number: parseInt(epForm.episode_number),
+        title: epForm.title,
+        file_path: epForm.file_path,
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Episode added!');
+      setEpForm({ ...epForm, episode_number: String(parseInt(epForm.episode_number) + 1), title: '', file_path: '' });
+      loadAnimeList();
+      if (selectedAnime) {
+        const r = await fetch(`/api/anime/${selectedAnime.id}`);
+        setSelectedAnime(await r.json());
+      }
+    } else {
+      showToast(data.error || 'Error', 'error');
+    }
+  }
+
+  async function deleteEpisode(id) {
+    await fetch('/api/admin/episodes', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    showToast('Episode deleted');
+    if (selectedAnime) {
+      const r = await fetch(`/api/anime/${selectedAnime.id}`);
+      setSelectedAnime(await r.json());
+    }
+    loadAnimeList();
+  }
+
+  async function selectAnime(anime) {
+    const res = await fetch(`/api/anime/${anime.id}`);
+    const data = await res.json();
+    setSelectedAnime(data);
+    setEpForm({ anime_id: String(data.id), episode_number: String((data.episodes?.length || 0) + 1), title: '', file_path: '' });
+    setTab('episodes');
+  }
+
+  // --- Sync functions ---
+  async function loadSyncPreview() {
+    setSyncLoading(true);
+    setSyncResults(null);
+    try {
+      const res = await fetch('/api/admin/sync');
+      if (!res.ok) {
+        let errorMsg = `Server error (${res.status})`;
+        try {
+          const data = await res.json();
+          errorMsg = data.error || errorMsg;
+        } catch { /* response wasn't JSON */ }
+        showToast(errorMsg, 'error');
+        setSyncLoading(false);
+        return;
+      }
+      const data = await res.json();
+      setSyncPreview(data);
+    } catch (err) {
+      showToast('Failed to connect to server: ' + err.message, 'error');
+    }
+    setSyncLoading(false);
+  }
+
+  async function syncSeries(jellyfinIds) {
+    setSyncing(true);
+    setSyncResults(null);
+    try {
+      const res = await fetch('/api/admin/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jellyfin_ids: jellyfinIds }),
+      });
+      const data = await res.json();
+      setSyncResults(data);
+      loadAnimeList();
+      loadSyncPreview();
+      const created = data.results?.filter(r => r.status === 'created').length || 0;
+      const updated = data.results?.filter(r => r.status === 'updated').length || 0;
+      showToast(`Synced! ${created} new, ${updated} updated.`);
+    } catch (err) {
+      showToast('Sync failed: ' + err.message, 'error');
+    }
+    setSyncing(false);
+  }
+
+  async function syncAll() {
+    setSyncing(true);
+    setSyncResults(null);
+    try {
+      const res = await fetch('/api/admin/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sync_all: true }),
+      });
+      const data = await res.json();
+      setSyncResults(data);
+      loadAnimeList();
+      loadSyncPreview();
+      const created = data.results?.filter(r => r.status === 'created').length || 0;
+      const updated = data.results?.filter(r => r.status === 'updated').length || 0;
+      showToast(`Synced all! ${created} new, ${updated} updated.`);
+    } catch (err) {
+      showToast('Sync failed: ' + err.message, 'error');
+    }
+    setSyncing(false);
+  }
+
+  const tabs = [
+    { id: 'sync', label: '🔄 Sync Library' },
+    { id: 'add', label: '➕ Add Anime' },
+    { id: 'manage', label: '📋 Manage' },
+    { id: 'episodes', label: '🎬 Episodes' },
+  ];
+
+  return (
+    <div className="admin-page">
+      <h1>Admin Panel</h1>
+      <p className="subtitle">Manage your anime library</p>
+
+      <div className="admin-tabs">
+        {tabs.map(t => (
+          <button key={t.id} className={`admin-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* SYNC LIBRARY TAB */}
+      {tab === 'sync' && (
+        <div>
+          <div className="admin-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div>
+                <h3 style={{ margin: 0 }}>🔄 Jellyfin Library Sync</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                  Automatically import anime from your Jellyfin server with AniList metadata.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button className="btn btn-secondary" onClick={loadSyncPreview} disabled={syncLoading}>
+                  {syncLoading ? '⏳ Scanning...' : '🔍 Scan Jellyfin'}
+                </button>
+              </div>
+            </div>
+
+            {!syncPreview && !syncLoading && (
+              <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
+                <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📡</p>
+                <p>Click <strong>Scan Jellyfin</strong> to see what anime are available to import.</p>
+              </div>
+            )}
+
+            {syncLoading && (
+              <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
+                <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⏳</p>
+                <p>Scanning your Jellyfin library...</p>
+              </div>
+            )}
+
+            {syncPreview && !syncLoading && (
+              <>
+                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                  <div style={{ background: 'var(--bg-tertiary)', padding: '0.75rem 1rem', borderRadius: 'var(--radius)', flex: 1, minWidth: '120px' }}>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{syncPreview.total}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>In Jellyfin</div>
+                  </div>
+                  <div style={{ background: 'var(--bg-tertiary)', padding: '0.75rem 1rem', borderRadius: 'var(--radius)', flex: 1, minWidth: '120px' }}>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#22c55e' }}>{syncPreview.new_count}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>New</div>
+                  </div>
+                  <div style={{ background: 'var(--bg-tertiary)', padding: '0.75rem 1rem', borderRadius: 'var(--radius)', flex: 1, minWidth: '120px' }}>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{syncPreview.existing_count}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Already Synced</div>
+                  </div>
+                </div>
+
+                {syncPreview.new_count > 0 && (
+                  <button className="btn btn-primary" onClick={syncAll} disabled={syncing} style={{ marginBottom: '1rem' }}>
+                    {syncing ? '⏳ Syncing...' : `🚀 Sync All ${syncPreview.new_count} New Anime`}
+                  </button>
+                )}
+
+                <div className="admin-anime-list">
+                  {syncPreview.series.map(s => (
+                    <div key={s.jellyfin_id} className="admin-anime-item">
+                      <div className="info" style={{ flex: 1 }}>
+                        <h4>{s.name}</h4>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{s.path}</p>
+                      </div>
+                      <div className="actions">
+                        {s.already_exists ? (
+                          <span style={{ fontSize: '0.8rem', color: '#22c55e', padding: '0.25rem 0.75rem', background: 'rgba(34,197,94,0.1)', borderRadius: '999px' }}>✓ Synced</span>
+                        ) : (
+                          <button className="btn btn-primary btn-sm" onClick={() => syncSeries([s.jellyfin_id])} disabled={syncing}>
+                            {syncing ? '...' : 'Import'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {syncResults && (
+              <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--bg-tertiary)', borderRadius: 'var(--radius)' }}>
+                <h4 style={{ marginBottom: '0.5rem' }}>Sync Results</h4>
+                {syncResults.results?.map((r, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid var(--border)', fontSize: '0.9rem' }}>
+                    <span>{r.name}</span>
+                    <span style={{ color: r.status === 'error' ? '#ef4444' : r.status === 'created' ? '#22c55e' : 'var(--text-secondary)' }}>
+                      {r.status === 'created' && `✅ Created — ${r.episodes_added} episodes`}
+                      {r.status === 'updated' && `🔄 Updated — ${r.episodes_added} new episodes`}
+                      {r.status === 'error' && `❌ ${r.error}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ADD ANIME TAB */}
+      {tab === 'add' && (
+        <div>
+          <div className="admin-card">
+            <h3>🔍 Import from AniList</h3>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <input className="form-input" placeholder="Search AniList..." value={anilistQuery}
+                onChange={e => setAnilistQuery(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && searchAnilist()} />
+              <button className="btn btn-primary" onClick={searchAnilist}>Search</button>
+            </div>
+            {anilistResults.length > 0 && (
+              <div className="admin-anime-list" style={{ marginTop: '1rem' }}>
+                {anilistResults.map(r => (
+                  <div key={r.anilist_id} className="admin-anime-item" onClick={() => importFromAnilist(r.anilist_id)} style={{ cursor: 'pointer' }}>
+                    <img src={r.cover_image} alt={r.title} />
+                    <div className="info">
+                      <h4>{r.title}</h4>
+                      <p>{r.year} • {r.format} • {r.episodes || '?'} eps • ⭐ {r.rating}%</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <form className="admin-card" onSubmit={saveAnime}>
+            <h3>📝 Anime Details</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="form-group">
+                <label>Title *</label>
+                <input className="form-input" required value={form.title || ''} onChange={e => setForm({ ...form, title: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label>Romaji Title</label>
+                <input className="form-input" value={form.title_romaji || ''} onChange={e => setForm({ ...form, title_romaji: e.target.value })} />
+              </div>
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label>Description</label>
+                <textarea className="form-input" value={form.description || ''} onChange={e => setForm({ ...form, description: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label>Cover Image URL</label>
+                <input className="form-input" value={form.cover_image || ''} onChange={e => setForm({ ...form, cover_image: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label>Banner Image URL</label>
+                <input className="form-input" value={form.banner_image || ''} onChange={e => setForm({ ...form, banner_image: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label>Genres (comma separated)</label>
+                <input className="form-input" value={form.genres || ''} onChange={e => setForm({ ...form, genres: e.target.value })} placeholder="Action, Adventure, Fantasy" />
+              </div>
+              <div className="form-group">
+                <label>Status</label>
+                <select className="form-input" value={form.status || ''} onChange={e => setForm({ ...form, status: e.target.value })}>
+                  <option value="">Select...</option>
+                  <option value="FINISHED">Finished</option>
+                  <option value="RELEASING">Releasing</option>
+                  <option value="NOT_YET_RELEASED">Not Yet Released</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Total Episodes</label>
+                <input className="form-input" type="number" value={form.episodes_total || ''} onChange={e => setForm({ ...form, episodes_total: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label>Rating (%)</label>
+                <input className="form-input" type="number" value={form.rating || ''} onChange={e => setForm({ ...form, rating: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label>Year</label>
+                <input className="form-input" type="number" value={form.year || ''} onChange={e => setForm({ ...form, year: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label>Format</label>
+                <select className="form-input" value={form.format || ''} onChange={e => setForm({ ...form, format: e.target.value })}>
+                  <option value="">Select...</option>
+                  <option value="TV">TV</option>
+                  <option value="MOVIE">Movie</option>
+                  <option value="OVA">OVA</option>
+                  <option value="ONA">ONA</option>
+                  <option value="SPECIAL">Special</option>
+                </select>
+              </div>
+            </div>
+            {form.cover_image && (
+              <div style={{ marginTop: '1rem' }}>
+                <img src={form.cover_image} alt="Preview" style={{ width: '100px', borderRadius: '8px' }} />
+              </div>
+            )}
+            <button type="submit" className="btn btn-primary" style={{ marginTop: '1rem' }}>Save Anime</button>
+          </form>
+        </div>
+      )}
+
+      {/* MANAGE TAB */}
+      {tab === 'manage' && (
+        <div className="admin-card">
+          <h3>Your Library ({animeList.length} anime)</h3>
+          {animeList.length === 0 ? (
+            <p style={{ color: 'var(--text-muted)' }}>No anime added yet. Go to "Add Anime" tab.</p>
+          ) : (
+            <div className="admin-anime-list">
+              {animeList.map(a => (
+                <div key={a.id} className="admin-anime-item">
+                  <img src={a.cover_image || '/placeholder.png'} alt={a.title} />
+                  <div className="info">
+                    <h4>{a.title}</h4>
+                    <p>{a.episode_count} episodes linked • {a.year || 'N/A'} • ⭐ {a.rating || 'N/A'}%</p>
+                  </div>
+                  <div className="actions">
+                    <button className="btn btn-secondary btn-sm" onClick={() => selectAnime(a)}>Episodes</button>
+                    <button className="btn btn-sm" style={{ color: '#ef4444' }} onClick={() => deleteAnime(a.id)}>Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* EPISODES TAB */}
+      {tab === 'episodes' && (
+        <div>
+          {!selectedAnime ? (
+            <div className="admin-card">
+              <h3>Select an anime</h3>
+              <div className="admin-anime-list">
+                {animeList.map(a => (
+                  <div key={a.id} className="admin-anime-item" onClick={() => selectAnime(a)} style={{ cursor: 'pointer' }}>
+                    <img src={a.cover_image || '/placeholder.png'} alt={a.title} />
+                    <div className="info">
+                      <h4>{a.title}</h4>
+                      <p>{a.episode_count} episodes</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="admin-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <h3>📂 {selectedAnime.title} — Episodes</h3>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setSelectedAnime(null)}>← Back</button>
+                </div>
+
+                {selectedAnime.episodes?.length > 0 && (
+                  <div className="episode-grid" style={{ marginBottom: '1.5rem' }}>
+                    {selectedAnime.episodes.map(ep => (
+                      <div key={ep.id} className="episode-item">
+                        <span className="episode-number">{ep.episode_number}</span>
+                        <span className="episode-title">{ep.title || `Episode ${ep.episode_number}`}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {ep.file_path}
+                        </span>
+                        <button className="btn btn-sm" style={{ color: '#ef4444' }} onClick={() => deleteEpisode(ep.id)}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <form className="admin-card" onSubmit={addEpisode}>
+                <h3>➕ Add Episode</h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr', gap: '1rem' }}>
+                  <div className="form-group">
+                    <label>EP #</label>
+                    <input className="form-input" type="number" required value={epForm.episode_number}
+                      onChange={e => setEpForm({ ...epForm, episode_number: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label>Title (optional)</label>
+                    <input className="form-input" value={epForm.title}
+                      onChange={e => setEpForm({ ...epForm, title: e.target.value })} placeholder="Episode title" />
+                  </div>
+                  <div className="form-group">
+                    <label>File Path *</label>
+                    <input className="form-input" required value={epForm.file_path}
+                      onChange={e => setEpForm({ ...epForm, file_path: e.target.value })}
+                      placeholder="e.g. Naruto/S01E01.mp4" />
+                  </div>
+                </div>
+                <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem' }}>Add Episode</button>
+              </form>
+            </>
+          )}
+        </div>
+      )}
+
+      {toast && (
+        <div className="toast-container">
+          <div className={`toast ${toast.type}`}>{toast.msg}</div>
+        </div>
+      )}
+    </div>
+  );
+}

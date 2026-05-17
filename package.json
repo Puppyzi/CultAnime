@@ -1,5 +1,5 @@
 {
-  "name": "animenig",
+  "name": "cultanime",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -8,8 +8,10 @@
     "start": "next start"
   },
   "dependencies": {
+    "better-sqlite3": "^12.9.0",
     "next": "16.2.6",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "uuid": "^14.0.0"
   }
 }
