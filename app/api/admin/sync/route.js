@@ -48,7 +48,9 @@ export async function GET() {
     // Get all existing anime from our database
     const existingAnime = db.prepare('SELECT * FROM anime').all();
     const existingByTitle = new Map();
+    const existingByJellyfinId = new Map();
     existingAnime.forEach(a => {
+      if (a.jellyfin_id) existingByJellyfinId.set(a.jellyfin_id, a);
       existingByTitle.set(a.title?.toLowerCase(), a);
       if (a.title_romaji) existingByTitle.set(a.title_romaji.toLowerCase(), a);
       if (a.title_english) existingByTitle.set(a.title_english.toLowerCase(), a);
@@ -57,7 +59,7 @@ export async function GET() {
     // Build the preview list
     const preview = jellyfinSeries.map(series => {
       const name = series.Name || '';
-      const existing = existingByTitle.get(name.toLowerCase());
+      const existing = existingByJellyfinId.get(series.Id) || existingByTitle.get(name.toLowerCase());
 
       return {
         jellyfin_id: series.Id,
@@ -130,16 +132,19 @@ export async function POST(request) {
 
       try {
         // --- Step 1: Check if this anime already exists ---
+        const existingByJellyfin = db.prepare(`SELECT id FROM anime WHERE jellyfin_id = ?`).get(series.Id);
         const existingByTitle = db.prepare(
           `SELECT id FROM anime WHERE LOWER(title) = LOWER(?) OR LOWER(title_romaji) = LOWER(?) OR LOWER(title_english) = LOWER(?)`
         ).get(series.Name, series.Name, series.Name);
 
         let animeId;
 
-        if (existingByTitle) {
+        if (existingByJellyfin || existingByTitle) {
           // Already exists — just use the existing ID and sync episodes
-          animeId = existingByTitle.id;
+          animeId = existingByJellyfin?.id || existingByTitle.id;
           seriesResult.status = 'updated';
+          // Make sure jellyfin_id is populated if it was matched by title
+          db.prepare(`UPDATE anime SET jellyfin_id = ? WHERE id = ? AND jellyfin_id IS NULL`).run(series.Id, animeId);
         } else {
           // --- Step 2: Search AniList for metadata ---
           let animeData = null;
@@ -176,21 +181,32 @@ export async function POST(request) {
             };
           }
 
-          // --- Step 3: Insert the anime into our database ---
-          const insertResult = db.prepare(`
-            INSERT INTO anime (title, title_romaji, title_english, description, cover_image, banner_image,
-              genres, status, episodes_total, rating, year, season, format, studios, anilist_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(
-            animeData.title, animeData.title_romaji, animeData.title_english,
-            animeData.description, animeData.cover_image, animeData.banner_image,
-            animeData.genres, animeData.status, animeData.episodes_total,
-            animeData.rating, animeData.year, animeData.season,
-            animeData.format, animeData.studios, animeData.anilist_id
-          );
+          let existingByAnilist = null;
+          if (animeData?.anilist_id) {
+            existingByAnilist = db.prepare(`SELECT id FROM anime WHERE anilist_id = ?`).get(animeData.anilist_id);
+          }
+          
+          if (existingByAnilist) {
+             animeId = existingByAnilist.id;
+             seriesResult.status = 'updated';
+             db.prepare(`UPDATE anime SET jellyfin_id = ? WHERE id = ? AND jellyfin_id IS NULL`).run(series.Id, animeId);
+          } else {
+            // --- Step 3: Insert the anime into our database ---
+            const insertResult = db.prepare(`
+              INSERT INTO anime (title, title_romaji, title_english, description, cover_image, banner_image,
+                genres, status, episodes_total, rating, year, season, format, studios, anilist_id, jellyfin_id)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+              animeData.title, animeData.title_romaji, animeData.title_english,
+              animeData.description, animeData.cover_image, animeData.banner_image,
+              animeData.genres, animeData.status, animeData.episodes_total,
+              animeData.rating, animeData.year, animeData.season,
+              animeData.format, animeData.studios, animeData.anilist_id, series.Id
+            );
 
-          animeId = Number(insertResult.lastInsertRowid);
-          seriesResult.status = 'created';
+            animeId = Number(insertResult.lastInsertRowid);
+            seriesResult.status = 'created';
+          }
         }
 
         seriesResult.anime_id = animeId;
