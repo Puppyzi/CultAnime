@@ -8,11 +8,13 @@ export default function WatchPage() {
   const router = useRouter();
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
+  const plyrRef = useRef(null);
   const saveInterval = useRef(null);
   const [anime, setAnime] = useState(null);
   const [currentEp, setCurrentEp] = useState(null);
   const [loading, setLoading] = useState(true);
   const [streamError, setStreamError] = useState(null);
+  const [subtitles, setSubtitles] = useState([]);
 
   const episodeNum = parseInt(ep);
 
@@ -56,34 +58,50 @@ export default function WatchPage() {
         if (!video) return;
 
         const hlsUrl = data.hlsUrl;
+        if (data.subtitles) setSubtitles(data.subtitles);
+
+        // Load HLS and Plyr dynamically
+        const loadScript = (src, id) => new Promise((resolve, reject) => {
+          if (window[id]) return resolve();
+          const existing = document.querySelector(`script[data-${id.toLowerCase()}]`);
+          if (existing) {
+            existing.addEventListener('load', resolve);
+            existing.addEventListener('error', reject);
+            return;
+          }
+          const script = document.createElement('script');
+          script.src = src;
+          script.setAttribute(`data-${id.toLowerCase()}`, 'true');
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+
+        await Promise.all([
+          loadScript('https://cdn.jsdelivr.net/npm/hls.js@latest', 'Hls'),
+          loadScript('https://cdn.plyr.io/3.7.8/plyr.polyfilled.js', 'Plyr')
+        ]);
+
+        if (destroyed) return;
+
+        const initPlyr = () => {
+          if (window.Plyr && !plyrRef.current) {
+            plyrRef.current = new window.Plyr(video, {
+              controls: ['play-large', 'rewind', 'play', 'fast-forward', 'progress', 'current-time', 'mute', 'volume', 'captions', 'settings', 'pip', 'airplay', 'fullscreen'],
+              seekTime: 5,
+              keyboard: { focused: true, global: true },
+              captions: { active: true, update: true, language: 'en' },
+            });
+          }
+        };
 
         // Check if browser natively supports HLS (Safari does)
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = hlsUrl;
           video.play().catch(() => {});
+          initPlyr();
           return;
         }
-
-        // For other browsers, dynamically load hls.js from CDN
-        if (!window.Hls) {
-          await new Promise((resolve, reject) => {
-            // Check if script is already being loaded
-            const existing = document.querySelector('script[data-hls]');
-            if (existing) {
-              existing.addEventListener('load', resolve);
-              existing.addEventListener('error', reject);
-              return;
-            }
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/hls.js@latest';
-            script.setAttribute('data-hls', 'true');
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.appendChild(script);
-          });
-        }
-
-        if (destroyed) return;
 
         if (window.Hls && window.Hls.isSupported()) {
           // Destroy any previous HLS instance
@@ -95,12 +113,17 @@ export default function WatchPage() {
             maxBufferLength: 30,
             maxMaxBufferLength: 60,
             startLevel: -1, // auto quality selection
+            renderTextTracksNatively: false, // Let Plyr handle subtitles
           });
 
           hls.loadSource(hlsUrl);
           hls.attachMedia(video);
 
-          hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+          hls.on(window.Hls.Events.MANIFEST_PARSED, (event, data) => {
+            // Force the highest available quality (Jellyfin puts highest bitrate at the end of the levels array)
+            if (data.levels && data.levels.length > 0) {
+              hls.currentLevel = data.levels.length - 1;
+            }
             if (!destroyed) {
               video.play().catch(() => {});
             }
@@ -125,10 +148,12 @@ export default function WatchPage() {
           });
 
           hlsRef.current = hls;
+          initPlyr();
         } else {
           // Fallback: try direct stream URL for browsers that might support the codec
           video.src = data.directUrl;
           video.play().catch(() => {});
+          initPlyr();
         }
       } catch (err) {
         console.error('Stream init error:', err);
@@ -143,6 +168,10 @@ export default function WatchPage() {
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
+      }
+      if (plyrRef.current) {
+        plyrRef.current.destroy();
+        plyrRef.current = null;
       }
     };
   }, [currentEp]);
@@ -163,7 +192,7 @@ export default function WatchPage() {
           completed: v.duration > 0 && v.currentTime / v.duration > 0.9,
         }),
       });
-    } catch (e) { console.error(e); }
+    } catch (e) { /* ignore to avoid Next.js unhandled rejection overlay */ }
   }, [currentEp, animeId]);
 
   useEffect(() => {
@@ -171,23 +200,7 @@ export default function WatchPage() {
     return () => clearInterval(saveInterval.current);
   }, [saveProgress]);
 
-  useEffect(() => {
-    function handleKey(e) {
-      if (!videoRef.current) return;
-      const v = videoRef.current;
-      switch (e.key) {
-        case ' ': e.preventDefault(); v.paused ? v.play() : v.pause(); break;
-        case 'ArrowLeft': v.currentTime -= 10; break;
-        case 'ArrowRight': v.currentTime += 10; break;
-        case 'ArrowUp': e.preventDefault(); v.volume = Math.min(1, v.volume + 0.1); break;
-        case 'ArrowDown': e.preventDefault(); v.volume = Math.max(0, v.volume - 0.1); break;
-        case 'f': case 'F':
-          document.fullscreenElement ? document.exitFullscreen() : v.requestFullscreen(); break;
-      }
-    }
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, []);
+
 
   const nextEp = anime?.episodes?.find(e => e.episode_number === episodeNum + 1);
   const prevEp = anime?.episodes?.find(e => e.episode_number === episodeNum - 1);
@@ -227,14 +240,28 @@ export default function WatchPage() {
               </p>
             </div>
           ) : (
-            <video
-              ref={videoRef}
-              controls
-              autoPlay
-              onEnded={() => { saveProgress(); if (nextEp) router.push(`/watch/${animeId}/${nextEp.episode_number}`); }}
-              onPause={saveProgress}
-              style={{ width: '100%', height: '100%' }}
-            />
+            <>
+              <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css" />
+              <style>{`:root { --plyr-color-main: var(--accent); } .plyr { width: 100%; height: 100%; border-radius: var(--radius); }`}</style>
+              <video
+                ref={videoRef}
+                autoPlay
+                onEnded={() => { saveProgress(); if (nextEp) router.push(`/watch/${animeId}/${nextEp.episode_number}`); }}
+                onPause={saveProgress}
+                crossOrigin="anonymous"
+              >
+                {subtitles.map((sub, idx) => (
+                  <track 
+                    key={idx}
+                    kind="captions" 
+                    label={sub.title} 
+                    srcLang={sub.language} 
+                    src={sub.url} 
+                    default={sub.isDefault}
+                  />
+                ))}
+              </video>
+            </>
           )}
         </div>
         <div className="player-info">
@@ -243,10 +270,11 @@ export default function WatchPage() {
           </Link>
           <h1>{currentEp.title || `Episode ${currentEp.episode_number}`}</h1>
           <span className="episode-label">Episode {currentEp.episode_number}{anime.episodes_total ? ` of ${anime.episodes_total}` : ''}</span>
-          <div className="player-nav">
-            {prevEp ? (
+          <div className="player-nav" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1 }} />
+            {prevEp && (
               <Link href={`/watch/${animeId}/${prevEp.episode_number}`} className="btn btn-secondary btn-sm">← Previous</Link>
-            ) : <span />}
+            )}
             {nextEp && (
               <Link href={`/watch/${animeId}/${nextEp.episode_number}`} className="btn btn-primary btn-sm">Next →</Link>
             )}
