@@ -340,6 +340,22 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
   color: var(--text-muted); font-size: 0.72rem; font-weight: 500;
   white-space: nowrap;
 }
+.episode-detail-item {
+  align-items: flex-start; min-height: 104px; padding: 0.75rem;
+}
+.episode-thumbnail {
+  width: 144px; aspect-ratio: 16/9; flex: 0 0 144px;
+  object-fit: cover; border-radius: var(--radius-sm); background: var(--bg-tertiary);
+}
+.episode-detail-copy {
+  flex-direction: column; align-items: flex-start; gap: 0.25rem; flex-wrap: nowrap;
+  padding-top: 0.1rem;
+}
+.episode-overview {
+  color: var(--text-secondary); font-size: 0.76rem; line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .episode-progress { width: 50px; height: 3px; background: var(--bg-tertiary); border-radius: 2px; overflow: hidden; }
 .episode-progress-bar { height: 100%; background: var(--accent); border-radius: 2px; }
 
@@ -351,6 +367,23 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
 .player-info { padding: 1.25rem 1.5rem; background: var(--bg-primary); }
 .player-info h1 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.15rem; }
 .player-info .episode-label { color: var(--accent); font-size: 0.8rem; font-weight: 600; }
+.player-episode-summary {
+  display: flex; gap: 0.9rem; align-items: flex-start;
+  margin-top: 0.85rem; padding-top: 0.85rem; border-top: 1px solid var(--border);
+}
+.player-episode-thumbnail {
+  width: 168px; aspect-ratio: 16/9; flex: 0 0 168px;
+  object-fit: cover; border-radius: var(--radius-sm); background: var(--bg-tertiary);
+}
+.player-episode-summary-copy { min-width: 0; max-width: 760px; }
+.player-episode-summary-meta {
+  color: var(--text-muted); font-size: 0.75rem; font-weight: 600; margin-bottom: 0.35rem;
+}
+.player-episode-summary p {
+  color: var(--text-secondary); font-size: 0.8rem; line-height: 1.55;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .player-meta-row {
   display: flex; align-items: center; justify-content: space-between;
   gap: 0.75rem; flex-wrap: wrap;
@@ -399,6 +432,26 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
   padding: 0.75rem 1rem; font-size: 0.85rem; font-weight: 700;
   border-bottom: 1px solid var(--border); position: sticky; top: 0;
   background: var(--bg-primary); z-index: 5;
+}
+.player-episode-item {
+  align-items: flex-start; gap: 0.55rem; padding: 0.55rem 0.65rem;
+}
+.episode-sidebar-thumbnail {
+  width: 76px; aspect-ratio: 16/9; flex: 0 0 76px;
+  object-fit: cover; border-radius: var(--radius-sm); background: var(--bg-tertiary);
+}
+.player-episode-copy {
+  flex-direction: column; align-items: flex-start; gap: 0.15rem; flex-wrap: nowrap;
+}
+.player-episode-copy .episode-title {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; line-height: 1.35;
+}
+.player-episode-item .episode-number {
+  min-width: 20px; padding-top: 0.15rem;
+}
+.player-episode-item .episode-meta {
+  font-size: 0.66rem;
 }
 
 /* ---- BROWSE ---- */
@@ -468,6 +521,38 @@ textarea.form-input { resize: vertical; min-height: 70px; }
 .admin-anime-item .info h4 { font-size: 0.85rem; font-weight: 600; }
 .admin-anime-item .info p { font-size: 0.72rem; color: var(--text-secondary); }
 .admin-anime-item .actions { display: flex; gap: 0.4rem; }
+.admin-episode-editor {
+  background: var(--bg-card); border-radius: var(--radius-sm);
+}
+.episode-admin-path {
+  color: var(--text-muted); font-size: 0.72rem;
+  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.episode-admin-meta {
+  color: var(--text-secondary); font-size: 0.72rem; white-space: nowrap;
+}
+.episode-admin-badge {
+  color: var(--accent); background: var(--accent-dim);
+  border-radius: 3px; padding: 0.15rem 0.35rem; font-size: 0.65rem; font-weight: 700;
+}
+.form-grid {
+  display: grid; gap: 0.75rem;
+}
+.episode-metadata-form {
+  border-top: 1px solid var(--border); padding: 0.9rem 1rem 1rem;
+  background: rgba(255,255,255,0.02);
+}
+.episode-metadata-grid {
+  grid-template-columns: 90px 150px 120px minmax(180px, 1fr);
+}
+.episode-metadata-title,
+.episode-metadata-path,
+.episode-metadata-overview {
+  grid-column: 1 / -1;
+}
+.episode-metadata-actions {
+  display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.25rem;
+}
 
 /* ---- WATCHLIST ---- */
 .watchlist-page { padding: 1.5rem 2.5rem; }
@@ -537,6 +622,11 @@ textarea.form-input { resize: vertical; min-height: 70px; }
   .hero { height: 300px; }
   .hero-content { padding: 1.5rem; }
   .hero-content h1 { font-size: 1.5rem; }
+  .episode-metadata-grid { grid-template-columns: 1fr; }
+  .episode-detail-item { align-items: flex-start; }
+  .episode-thumbnail { width: 112px; flex-basis: 112px; }
+  .player-episode-summary { flex-direction: column; }
+  .player-episode-thumbnail { width: min(100%, 260px); flex-basis: auto; }
   .navbar { padding: 0 0.75rem; }
   .navbar-search input { width: 140px; }
   .navbar-search input:focus { width: 180px; }

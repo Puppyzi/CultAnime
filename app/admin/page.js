@@ -1,6 +1,41 @@
 'use client';
 import { useState, useEffect } from 'react';
 
+const emptyEpisodeEditForm = {
+  id: '',
+  episode_number: '',
+  title: '',
+  file_path: '',
+  air_date: '',
+  runtime_minutes: '',
+  overview: '',
+};
+
+function formatEpisodeDate(value) {
+  if (!value) return 'No date';
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.valueOf())) return value;
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+}
+
+function formatEpisodeRuntime(seconds) {
+  if (!seconds) return 'No runtime';
+  const minutes = Math.max(1, Math.round(Number(seconds) / 60));
+  return `${minutes}m`;
+}
+
+function episodeToEditForm(ep) {
+  return {
+    id: ep.id,
+    episode_number: String(ep.episode_number || ''),
+    title: ep.title || '',
+    file_path: ep.file_path || '',
+    air_date: ep.air_date || '',
+    runtime_minutes: ep.duration ? String(Math.max(1, Math.round(Number(ep.duration) / 60))) : '',
+    overview: ep.overview || '',
+  };
+}
+
 export default function AdminPage() {
   const [tab, setTab] = useState('add');
   const [animeList, setAnimeList] = useState([]);
@@ -14,6 +49,8 @@ export default function AdminPage() {
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncResults, setSyncResults] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [editingEpisodeId, setEditingEpisodeId] = useState(null);
+  const [episodeEditForm, setEpisodeEditForm] = useState(emptyEpisodeEditForm);
 
   // Form state
   const [form, setForm] = useState({
@@ -139,6 +176,7 @@ export default function AdminPage() {
       body: JSON.stringify({ id }),
     });
     showToast('Episode deleted');
+    if (editingEpisodeId === id) cancelEditEpisode();
     if (selectedAnime) {
       const r = await fetch(`/api/anime/${selectedAnime.id}`);
       setSelectedAnime(await r.json());
@@ -146,11 +184,58 @@ export default function AdminPage() {
     loadAnimeList();
   }
 
+  async function reloadSelectedAnime(id = selectedAnime?.id) {
+    if (!id) return;
+    const r = await fetch(`/api/anime/${id}`);
+    setSelectedAnime(await r.json());
+  }
+
+  function startEditEpisode(ep) {
+    setEditingEpisodeId(ep.id);
+    setEpisodeEditForm(episodeToEditForm(ep));
+  }
+
+  function cancelEditEpisode() {
+    setEditingEpisodeId(null);
+    setEpisodeEditForm(emptyEpisodeEditForm);
+  }
+
+  async function saveEpisode(e) {
+    e.preventDefault();
+
+    const body = {
+      id: episodeEditForm.id,
+      episode_number: parseInt(episodeEditForm.episode_number),
+      title: episodeEditForm.title,
+      file_path: episodeEditForm.file_path,
+      air_date: episodeEditForm.air_date || null,
+      duration: episodeEditForm.runtime_minutes ? Math.round(Number(episodeEditForm.runtime_minutes) * 60) : null,
+      overview: episodeEditForm.overview || null,
+    };
+
+    const res = await fetch('/api/admin/episodes', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      showToast('Episode metadata saved!');
+      cancelEditEpisode();
+      reloadSelectedAnime();
+      loadAnimeList();
+    } else {
+      showToast(data.error || 'Error saving episode', 'error');
+    }
+  }
+
   async function selectAnime(anime) {
     const res = await fetch(`/api/anime/${anime.id}`);
     const data = await res.json();
     setSelectedAnime(data);
     setEpForm({ anime_id: String(data.id), episode_number: String((data.episodes?.length || 0) + 1), title: '', file_path: '' });
+    cancelEditEpisode();
     setTab('episodes');
   }
 
@@ -495,13 +580,63 @@ export default function AdminPage() {
                 {selectedAnime.episodes?.length > 0 && (
                   <div className="episode-grid" style={{ marginBottom: '1.5rem' }}>
                     {selectedAnime.episodes.map(ep => (
-                      <div key={ep.id} className="episode-item">
+                      <div key={ep.id} className="admin-episode-editor">
+                        <div className="episode-item">
                         <span className="episode-number">{ep.episode_number}</span>
                         <span className="episode-title">{ep.title || `Episode ${ep.episode_number}`}</span>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <span className="episode-admin-path">
                           {ep.file_path}
                         </span>
-                        <button className="btn btn-sm" style={{ color: '#ef4444' }} onClick={() => deleteEpisode(ep.id)}>✕</button>
+                        <span className="episode-admin-meta">
+                          {formatEpisodeDate(ep.air_date)} | {formatEpisodeRuntime(ep.duration)}
+                        </span>
+                        {Boolean(ep.manual_metadata) && <span className="episode-admin-badge">Manual</span>}
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => startEditEpisode(ep)}>
+                          {editingEpisodeId === ep.id ? 'Editing' : 'Edit'}
+                        </button>
+                        <button type="button" className="btn btn-sm" style={{ color: '#ef4444' }} onClick={() => deleteEpisode(ep.id)}>✕</button>
+                        </div>
+
+                        {editingEpisodeId === ep.id && (
+                          <form className="episode-metadata-form" onSubmit={saveEpisode}>
+                            <div className="form-grid episode-metadata-grid">
+                              <div className="form-group">
+                                <label>EP #</label>
+                                <input className="form-input" type="number" required value={episodeEditForm.episode_number}
+                                  onChange={e => setEpisodeEditForm({ ...episodeEditForm, episode_number: e.target.value })} />
+                              </div>
+                              <div className="form-group">
+                                <label>Air Date</label>
+                                <input className="form-input" type="date" value={episodeEditForm.air_date}
+                                  onChange={e => setEpisodeEditForm({ ...episodeEditForm, air_date: e.target.value })} />
+                              </div>
+                              <div className="form-group">
+                                <label>Runtime</label>
+                                <input className="form-input" type="number" min="1" value={episodeEditForm.runtime_minutes}
+                                  onChange={e => setEpisodeEditForm({ ...episodeEditForm, runtime_minutes: e.target.value })} placeholder="Minutes" />
+                              </div>
+                              <div className="form-group episode-metadata-title">
+                                <label>Title</label>
+                                <input className="form-input" value={episodeEditForm.title}
+                                  onChange={e => setEpisodeEditForm({ ...episodeEditForm, title: e.target.value })} />
+                              </div>
+                              <div className="form-group episode-metadata-path">
+                                <label>File Path</label>
+                                <input className="form-input" required value={episodeEditForm.file_path}
+                                  onChange={e => setEpisodeEditForm({ ...episodeEditForm, file_path: e.target.value })} />
+                              </div>
+                              <div className="form-group episode-metadata-overview">
+                                <label>Overview</label>
+                                <textarea className="form-input" value={episodeEditForm.overview}
+                                  onChange={e => setEpisodeEditForm({ ...episodeEditForm, overview: e.target.value })} />
+                              </div>
+                            </div>
+                            <div className="episode-metadata-actions">
+                              <button type="submit" className="btn btn-primary btn-sm">Save Metadata</button>
+                              <button type="button" className="btn btn-secondary btn-sm" onClick={cancelEditEpisode}>Cancel</button>
+                            </div>
+                          </form>
+                        )}
                       </div>
                     ))}
                   </div>

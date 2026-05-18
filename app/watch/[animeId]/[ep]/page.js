@@ -6,6 +6,31 @@ import { useParams, useRouter } from 'next/navigation';
 const SUBTITLE_PREF_KEY = 'cultanime.subtitleTrack';
 const SUBTITLE_MODE_PREF_KEY = 'cultanime.subtitleMode';
 
+function episodeThumbnailUrl(ep, width = 320, height = 180) {
+  return `/api/thumbnail/${ep.id}?width=${width}&height=${height}`;
+}
+
+function formatEpisodeDate(value) {
+  if (!value) return null;
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value);
+  if (Number.isNaN(date.valueOf())) return null;
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date);
+}
+
+function formatEpisodeRuntime(seconds) {
+  if (!seconds || !Number.isFinite(Number(seconds))) return null;
+  return `${Math.max(1, Math.round(Number(seconds) / 60))}m`;
+}
+
+function episodeMetaText(ep) {
+  return [formatEpisodeDate(ep.air_date), formatEpisodeRuntime(ep.duration)].filter(Boolean).join(' | ');
+}
+
 function getSubtitleId(subtitle) {
   return String(subtitle.index);
 }
@@ -509,6 +534,7 @@ export default function WatchPage() {
 
   const nextEp = anime?.episodes?.find(e => e.episode_number === episodeNum + 1);
   const prevEp = anime?.episodes?.find(e => e.episode_number === episodeNum - 1);
+  const currentEpMeta = currentEp ? episodeMetaText(currentEp) : '';
 
   if (loading) {
     return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
@@ -591,6 +617,21 @@ export default function WatchPage() {
               </div>
             )}
           </div>
+          <div className="player-episode-summary">
+            <img
+              className="player-episode-thumbnail"
+              src={episodeThumbnailUrl(currentEp, 320, 180)}
+              alt=""
+            />
+            <div className="player-episode-summary-copy">
+              {currentEpMeta && <div className="player-episode-summary-meta">{currentEpMeta}</div>}
+              {currentEp.overview ? (
+                <p>{currentEp.overview}</p>
+              ) : (
+                <p>{anime.description}</p>
+              )}
+            </div>
+          </div>
           <div className="player-nav" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
             <div className="external-player-actions">
               <a
@@ -631,14 +672,27 @@ export default function WatchPage() {
       <div className="player-sidebar">
         <h3>Episodes</h3>
         <div className="episode-grid" style={{ padding: '0' }}>
-          {anime.episodes.map(e => (
+          {anime.episodes.map(e => {
+            const meta = episodeMetaText(e);
+
+            return (
             <Link key={e.id} href={`/watch/${animeId}/${e.episode_number}`}
-              className={`episode-item ${e.episode_number === episodeNum ? 'active' : ''}`}>
+              className={`episode-item player-episode-item ${e.episode_number === episodeNum ? 'active' : ''}`}>
+              <img
+                className="episode-sidebar-thumbnail"
+                src={episodeThumbnailUrl(e, 160, 90)}
+                alt=""
+                loading="lazy"
+              />
               <span className="episode-number">{e.episode_number}</span>
-              <span className="episode-title">{e.title || `Episode ${e.episode_number}`}</span>
+              <span className="episode-copy player-episode-copy">
+                <span className="episode-title">{e.title || `Episode ${e.episode_number}`}</span>
+                {meta && <span className="episode-meta">{meta}</span>}
+              </span>
               {e.episode_number === episodeNum && <span style={{ color: 'var(--accent)' }}>▶</span>}
             </Link>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

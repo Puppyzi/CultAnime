@@ -33,6 +33,10 @@ function episodeMetaText(ep) {
   return [formatAirDate(ep.air_date), formatRuntime(ep)].filter(Boolean).join(' | ');
 }
 
+function episodeThumbnailUrl(ep, width = 320, height = 180) {
+  return `/api/thumbnail/${ep.id}?width=${width}&height=${height}`;
+}
+
 export default function AnimeDetailPage() {
   const { id } = useParams();
   const [anime, setAnime] = useState(null);
@@ -129,11 +133,18 @@ export default function AnimeDetailPage() {
                   const meta = episodeMetaText(ep);
 
                   return (
-                    <Link key={ep.id} href={`/watch/${anime.id}/${ep.episode_number}`} className="episode-item">
+                    <Link key={ep.id} href={`/watch/${anime.id}/${ep.episode_number}`} className="episode-item episode-detail-item">
+                      <img
+                        className="episode-thumbnail"
+                        src={episodeThumbnailUrl(ep)}
+                        alt=""
+                        loading="lazy"
+                      />
                       <span className="episode-number">{ep.episode_number}</span>
-                      <span className="episode-copy">
+                      <span className="episode-copy episode-detail-copy">
                         <span className="episode-title">{ep.title || `Episode ${ep.episode_number}`}</span>
                         {meta && <span className="episode-meta">{meta}</span>}
+                        {ep.overview && <span className="episode-overview">{ep.overview}</span>}
                       </span>
                       <span style={{ color: 'var(--accent)', fontSize: '0.85rem' }}>▶</span>
                     </Link>

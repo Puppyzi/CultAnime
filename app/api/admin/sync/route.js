@@ -324,10 +324,22 @@ export async function POST(request) {
             END,
             file_path = COALESCE(NULLIF(excluded.file_path, ''), episodes.file_path),
             jellyfin_item_id = COALESCE(excluded.jellyfin_item_id, episodes.jellyfin_item_id),
-            duration = COALESCE(excluded.duration, episodes.duration),
-            air_date = COALESCE(excluded.air_date, episodes.air_date),
-            overview = COALESCE(excluded.overview, episodes.overview),
-            runtime_ticks = COALESCE(excluded.runtime_ticks, episodes.runtime_ticks),
+            duration = CASE
+              WHEN episodes.manual_metadata = 1 THEN episodes.duration
+              ELSE COALESCE(excluded.duration, episodes.duration)
+            END,
+            air_date = CASE
+              WHEN episodes.manual_metadata = 1 THEN episodes.air_date
+              ELSE COALESCE(excluded.air_date, episodes.air_date)
+            END,
+            overview = CASE
+              WHEN episodes.manual_metadata = 1 THEN episodes.overview
+              ELSE COALESCE(excluded.overview, episodes.overview)
+            END,
+            runtime_ticks = CASE
+              WHEN episodes.manual_metadata = 1 THEN episodes.runtime_ticks
+              ELSE COALESCE(excluded.runtime_ticks, episodes.runtime_ticks)
+            END,
             provider_ids = COALESCE(excluded.provider_ids, episodes.provider_ids),
             season_number = COALESCE(excluded.season_number, episodes.season_number),
             production_year = COALESCE(excluded.production_year, episodes.production_year)
