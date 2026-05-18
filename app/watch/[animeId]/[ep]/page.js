@@ -608,6 +608,13 @@ export default function WatchPage() {
               >
                 Copy MPV command
               </button>
+              <a
+                href={`/api/download/${currentEp.id}`}
+                className="btn btn-secondary btn-sm"
+                title="Be sure to select the correct subtitle before downloading"
+              >
+                Download episode
+              </a>
               {mpvStatus && <span className="external-player-status">{mpvStatus}</span>}
             </div>
             <div style={{ flex: 1 }} />

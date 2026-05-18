@@ -3,6 +3,36 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
+const TICKS_PER_SECOND = 10000000;
+
+function formatAirDate(value) {
+  if (!value) return null;
+
+  const normalizedValue = /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? `${value}T00:00:00`
+    : value;
+  const date = new Date(normalizedValue);
+  if (Number.isNaN(date.valueOf())) return null;
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date);
+}
+
+function formatRuntime(ep) {
+  const seconds = ep.duration || (ep.runtime_ticks ? Math.round(Number(ep.runtime_ticks) / TICKS_PER_SECOND) : null);
+  if (!seconds || !Number.isFinite(seconds)) return null;
+
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  return `${minutes}m`;
+}
+
+function episodeMetaText(ep) {
+  return [formatAirDate(ep.air_date), formatRuntime(ep)].filter(Boolean).join(' | ');
+}
+
 export default function AnimeDetailPage() {
   const { id } = useParams();
   const [anime, setAnime] = useState(null);
@@ -95,13 +125,20 @@ export default function AnimeDetailPage() {
             <div className="episode-list">
               <h2>Episodes ({anime.episodes.length})</h2>
               <div className="episode-grid">
-                {anime.episodes.map(ep => (
-                  <Link key={ep.id} href={`/watch/${anime.id}/${ep.episode_number}`} className="episode-item">
-                    <span className="episode-number">{ep.episode_number}</span>
-                    <span className="episode-title">{ep.title || `Episode ${ep.episode_number}`}</span>
-                    <span style={{ color: 'var(--accent)', fontSize: '0.85rem' }}>▶</span>
-                  </Link>
-                ))}
+                {anime.episodes.map(ep => {
+                  const meta = episodeMetaText(ep);
+
+                  return (
+                    <Link key={ep.id} href={`/watch/${anime.id}/${ep.episode_number}`} className="episode-item">
+                      <span className="episode-number">{ep.episode_number}</span>
+                      <span className="episode-copy">
+                        <span className="episode-title">{ep.title || `Episode ${ep.episode_number}`}</span>
+                        {meta && <span className="episode-meta">{meta}</span>}
+                      </span>
+                      <span style={{ color: 'var(--accent)', fontSize: '0.85rem' }}>▶</span>
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           )}

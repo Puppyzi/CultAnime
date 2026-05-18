@@ -297,6 +297,12 @@ export default function AdminPage() {
                   </button>
                 )}
 
+                {syncPreview.existing_count > 0 && (
+                  <button className="btn btn-secondary" onClick={syncAll} disabled={syncing} style={{ marginBottom: '1rem', marginLeft: syncPreview.new_count > 0 ? '0.5rem' : 0 }}>
+                    {syncing ? 'Refreshing...' : 'Refresh Episode Metadata'}
+                  </button>
+                )}
+
                 <div className="admin-anime-list">
                   {syncPreview.series.map(s => (
                     <div key={s.jellyfin_id} className="admin-anime-item">
@@ -326,8 +332,8 @@ export default function AdminPage() {
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid var(--border)', fontSize: '0.9rem' }}>
                     <span>{r.name}</span>
                     <span style={{ color: r.status === 'error' ? '#ef4444' : r.status === 'created' ? '#22c55e' : 'var(--text-secondary)' }}>
-                      {r.status === 'created' && `✅ Created — ${r.episodes_added} episodes`}
-                      {r.status === 'updated' && `🔄 Updated — ${r.episodes_added} new episodes`}
+                      {r.status === 'created' && `Created - ${r.episodes_added} episodes`}
+                      {r.status === 'updated' && `Updated - ${r.episodes_added} new, ${r.episodes_updated || 0} refreshed`}
                       {r.status === 'error' && `❌ ${r.error}`}
                     </span>
                   </div>

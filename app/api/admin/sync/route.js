@@ -2,9 +2,75 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 import { getDb } from '../../../../lib/db';
 import { searchAnilist, getAnilistAnime, formatAnilistData } from '../../../../lib/anilist';
+import { getEpisodeAirDateOverride } from '../../../../lib/episode-overrides';
 
 const JELLYFIN_URL = () => process.env.JELLYFIN_URL?.replace(/\/+$/, '');
 const JELLYFIN_API_KEY = () => process.env.JELLYFIN_API_KEY;
+const SERIES_FIELDS = 'Path,ProviderIds,ProductionYear';
+const EPISODE_FIELDS = [
+  'Path',
+  'Overview',
+  'PremiereDate',
+  'RunTimeTicks',
+  'ProviderIds',
+  'ProductionYear',
+  'ParentIndexNumber',
+  'IndexNumber',
+].join(',');
+const TICKS_PER_SECOND = 10000000;
+
+function itemsEndpoint(params) {
+  return `/Items?${queryString(params)}`;
+}
+
+function queryString(params) {
+  return Object.entries(params)
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeQueryValue(value)}`)
+    .join('&');
+}
+
+function encodeQueryValue(value) {
+  return encodeURIComponent(value).replace(/%2C/g, ',');
+}
+
+function normalizeAirDate(value) {
+  if (!value) return null;
+
+  const text = String(value);
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+    return text.slice(0, 10);
+  }
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.valueOf())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function runtimeSeconds(runTimeTicks) {
+  if (!runTimeTicks) return null;
+  const seconds = Math.round(Number(runTimeTicks) / TICKS_PER_SECOND);
+  return Number.isFinite(seconds) ? seconds : null;
+}
+
+function serializeProviderIds(providerIds) {
+  try {
+    return JSON.stringify(providerIds || {});
+  } catch {
+    return '{}';
+  }
+}
+
+function episodeMetadata(ep, airDateOverride = null) {
+  return {
+    airDate: airDateOverride || normalizeAirDate(ep.PremiereDate),
+    overview: ep.Overview || null,
+    runtimeTicks: ep.RunTimeTicks || null,
+    duration: runtimeSeconds(ep.RunTimeTicks),
+    providerIds: serializeProviderIds(ep.ProviderIds),
+    seasonNumber: ep.ParentIndexNumber || null,
+    productionYear: ep.ProductionYear || null,
+  };
+}
 
 /**
  * Helper: Make an authenticated request to the Jellyfin API.
@@ -24,7 +90,11 @@ async function jellyfinFetch(endpoint) {
   } catch (networkErr) {
     throw new Error(`Cannot reach Jellyfin at ${baseUrl}. Make sure the server is running and accessible.`);
   }
-  if (!res.ok) throw new Error(`Jellyfin API error: ${res.status} — check your API key and server URL.`);
+  if (!res.ok) {
+    const detail = await res.text();
+    const message = detail ? `: ${detail.slice(0, 300)}` : '';
+    throw new Error(`Jellyfin API error: ${res.status} for ${endpoint}${message}`);
+  }
   return res.json();
 }
 
@@ -39,9 +109,11 @@ export async function GET() {
     const db = getDb();
 
     // Get all TV series from Jellyfin
-    const data = await jellyfinFetch(
-      '/Items?recursive=true&IncludeItemTypes=Series&fields=Path,ProviderIds'
-    );
+    const data = await jellyfinFetch(itemsEndpoint({
+      recursive: 'true',
+      IncludeItemTypes: 'Series',
+      fields: SERIES_FIELDS,
+    }));
 
     const jellyfinSeries = data.Items || [];
 
@@ -105,15 +177,20 @@ export async function POST(request) {
     // Determine which series to sync
     let seriesToSync = [];
     if (sync_all) {
-      const data = await jellyfinFetch(
-        '/Items?recursive=true&IncludeItemTypes=Series&fields=Path,ProviderIds'
-      );
+      const data = await jellyfinFetch(itemsEndpoint({
+        recursive: 'true',
+        IncludeItemTypes: 'Series',
+        fields: SERIES_FIELDS,
+      }));
       seriesToSync = data.Items || [];
     } else if (jellyfin_ids?.length > 0) {
-      for (const id of jellyfin_ids) {
-        const item = await jellyfinFetch(`/Items/${id}?fields=Path,ProviderIds`);
-        if (item) seriesToSync.push(item);
-      }
+      const requestedIds = new Set(jellyfin_ids);
+      const data = await jellyfinFetch(itemsEndpoint({
+        recursive: 'true',
+        IncludeItemTypes: 'Series',
+        fields: SERIES_FIELDS,
+      }));
+      seriesToSync = (data.Items || []).filter(item => requestedIds.has(item.Id));
     } else {
       return NextResponse.json({ error: 'Provide jellyfin_ids or sync_all' }, { status: 400 });
     }
@@ -127,6 +204,7 @@ export async function POST(request) {
         status: 'pending',
         anime_id: null,
         episodes_added: 0,
+        episodes_updated: 0,
         error: null,
       };
 
@@ -210,36 +288,93 @@ export async function POST(request) {
         }
 
         seriesResult.anime_id = animeId;
+        const animeRecord = db.prepare(`
+          SELECT anilist_id, title, title_romaji, title_english
+          FROM anime
+          WHERE id = ?
+        `).get(animeId);
 
         // --- Step 4: Fetch episodes from Jellyfin ---
-        const episodesData = await jellyfinFetch(
-          `/Items?parentId=${series.Id}&recursive=true&IncludeItemTypes=Episode&fields=Path&sortBy=SortName&sortOrder=Ascending`
-        );
+        const episodesData = await jellyfinFetch(itemsEndpoint({
+          parentId: series.Id,
+          recursive: 'true',
+          IncludeItemTypes: 'Episode',
+          fields: EPISODE_FIELDS,
+          sortBy: 'ParentIndexNumber,IndexNumber,SortName',
+          sortOrder: 'Ascending',
+        }));
 
         const jellyfinEpisodes = episodesData.Items || [];
 
-        // Insert episodes that don't already exist
-        const insertEp = db.prepare(`
-          INSERT OR IGNORE INTO episodes (anime_id, episode_number, title, file_path, jellyfin_item_id)
-          VALUES (?, ?, ?, ?, ?)
+        // Insert new episodes and refresh Jellyfin metadata for existing ones.
+        const existingEpisode = db.prepare(`
+          SELECT id FROM episodes WHERE anime_id = ? AND episode_number = ?
+        `);
+        const upsertEp = db.prepare(`
+          INSERT INTO episodes (
+            anime_id, episode_number, title, file_path, jellyfin_item_id, duration,
+            air_date, overview, runtime_ticks, provider_ids, season_number, production_year
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(anime_id, episode_number) DO UPDATE SET
+            title = CASE
+              WHEN episodes.title IS NULL OR TRIM(episodes.title) = '' OR episodes.title = ('Episode ' || episodes.episode_number)
+              THEN COALESCE(excluded.title, episodes.title)
+              ELSE episodes.title
+            END,
+            file_path = COALESCE(NULLIF(excluded.file_path, ''), episodes.file_path),
+            jellyfin_item_id = COALESCE(excluded.jellyfin_item_id, episodes.jellyfin_item_id),
+            duration = COALESCE(excluded.duration, episodes.duration),
+            air_date = COALESCE(excluded.air_date, episodes.air_date),
+            overview = COALESCE(excluded.overview, episodes.overview),
+            runtime_ticks = COALESCE(excluded.runtime_ticks, episodes.runtime_ticks),
+            provider_ids = COALESCE(excluded.provider_ids, episodes.provider_ids),
+            season_number = COALESCE(excluded.season_number, episodes.season_number),
+            production_year = COALESCE(excluded.production_year, episodes.production_year)
         `);
 
         let epsAdded = 0;
-        for (const ep of jellyfinEpisodes) {
-          const epNumber = ep.IndexNumber || 0;
+        let epsUpdated = 0;
+        for (const [index, ep] of jellyfinEpisodes.entries()) {
+          const epNumber = Number(ep.IndexNumber) > 0 ? Number(ep.IndexNumber) : index + 1;
           const epTitle = ep.Name || `Episode ${epNumber}`;
           const filePath = ep.Path || '';
           const jellyfinItemId = ep.Id;
+          const airDateOverride = getEpisodeAirDateOverride({
+            anilistId: animeRecord?.anilist_id,
+            title: animeRecord?.title || animeRecord?.title_romaji || animeRecord?.title_english || series.Name,
+          }, epNumber);
+          const metadata = episodeMetadata(ep, airDateOverride);
 
           try {
-            const result = insertEp.run(animeId, epNumber, epTitle, filePath, jellyfinItemId);
-            if (result.changes > 0) epsAdded++;
+            const alreadyExists = existingEpisode.get(animeId, epNumber);
+            upsertEp.run(
+              animeId,
+              epNumber,
+              epTitle,
+              filePath,
+              jellyfinItemId,
+              metadata.duration,
+              metadata.airDate,
+              metadata.overview,
+              metadata.runtimeTicks,
+              metadata.providerIds,
+              metadata.seasonNumber,
+              metadata.productionYear
+            );
+
+            if (alreadyExists) {
+              epsUpdated++;
+            } else {
+              epsAdded++;
+            }
           } catch (epErr) {
             // Duplicate episode — skip silently
           }
         }
 
         seriesResult.episodes_added = epsAdded;
+        seriesResult.episodes_updated = epsUpdated;
         seriesResult.total_episodes = jellyfinEpisodes.length;
 
       } catch (seriesErr) {
