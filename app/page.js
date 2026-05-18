@@ -87,20 +87,7 @@ export default function HomePage() {
               </div>
               <div className="anime-row">
                 {history.map(h => (
-                  <Link key={h.id} href={`/watch/${h.anime_id}/${h.episode_number}`} className="anime-card">
-                    <div className="anime-card-image-wrap">
-                      <img className="anime-card-image" src={h.cover_image} alt={h.title} />
-                      {h.duration > 0 && (
-                        <div className="card-progress">
-                          <div className="card-progress-bar" style={{ width: `${(h.progress / h.duration) * 100}%` }} />
-                        </div>
-                      )}
-                    </div>
-                    <div className="anime-card-info">
-                      <div className="anime-card-title">{h.title}</div>
-                      <div className="anime-card-meta"><span>EP {h.episode_number}</span></div>
-                    </div>
-                  </Link>
+                  <ContinueWatchingCard key={h.id} item={h} />
                 ))}
               </div>
             </section>
@@ -145,6 +132,44 @@ export default function HomePage() {
         </aside>
       </div>
     </>
+  );
+}
+
+function ContinueWatchingCard({ item }) {
+  const router = useRouter();
+  const [isFlipping, setIsFlipping] = useState(false);
+  const href = `/watch/${item.anime_id}/${item.episode_number}`;
+  const progressPercent = item.duration > 0
+    ? Math.min(100, Math.max(0, (item.progress / item.duration) * 100))
+    : 0;
+
+  const handleClick = (e) => {
+    e.preventDefault();
+    if (isFlipping) return;
+    setIsFlipping(true);
+    setTimeout(() => {
+      router.push(href);
+    }, 500);
+  };
+
+  return (
+    <a href={href} onClick={handleClick} className={`anime-card ${isFlipping ? 'card-flip-out' : ''}`}>
+      <div className="anime-card-image-wrap">
+        <img className="anime-card-image" src={item.cover_image || '/placeholder.png'} alt={item.title} />
+        {item.duration > 0 && (
+          <div className="card-progress">
+            <div className="card-progress-bar" style={{ width: `${progressPercent}%` }} />
+          </div>
+        )}
+        <div className="anime-card-overlay">
+          <span className="btn btn-primary btn-sm">▶ Continue</span>
+        </div>
+      </div>
+      <div className="anime-card-info">
+        <div className="anime-card-title">{item.title}</div>
+        <div className="anime-card-meta"><span>EP {item.episode_number}</span></div>
+      </div>
+    </a>
   );
 }
 
