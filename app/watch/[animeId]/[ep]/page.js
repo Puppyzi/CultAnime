@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 
 const SUBTITLE_PREF_KEY = 'cultanime.subtitleTrack';
-const SUBTITLE_MODE_PREF_KEY = 'cultanime.subtitleMode';
 
 function episodeThumbnailUrl(ep, width = 320, height = 180) {
   return `/api/thumbnail/${ep.id}?width=${width}&height=${height}`;
@@ -165,7 +164,10 @@ export default function WatchPage() {
   const [selectedSubtitle, setSelectedSubtitle] = useState('off');
   const [subtitleMode, setSubtitleMode] = useState('soft');
   const [mpvStatus, setMpvStatus] = useState('');
+  const [inWatchlist, setInWatchlist] = useState(false);
+  const [watchlistBusy, setWatchlistBusy] = useState(false);
 
+  const animeIdNumber = Number.parseInt(animeId, 10);
   const episodeNum = parseInt(ep);
   const burnedSubtitleKey = subtitleMode === 'burned' ? selectedSubtitle : 'soft';
   const playerDomKey = currentEp
@@ -216,15 +218,28 @@ export default function WatchPage() {
   }, [animeId, episodeNum]);
 
   useEffect(() => {
-    try {
-      const savedMode = window.localStorage.getItem(SUBTITLE_MODE_PREF_KEY);
-      if (savedMode === 'soft' || savedMode === 'burned') {
-        setSubtitleMode(savedMode);
+    let active = true;
+
+    async function loadWatchlistState() {
+      try {
+        const res = await fetch('/api/watchlist');
+        const data = await res.json();
+        if (!active || !res.ok) return;
+
+        setInWatchlist(Boolean(data.watchlist?.some(item => item.anime_id === animeIdNumber)));
+      } catch (error) {
+        console.error('Watchlist state failed:', error);
       }
-    } catch {
-      // Preference persistence is optional.
     }
-  }, []);
+
+    if (Number.isFinite(animeIdNumber)) {
+      loadWatchlistState();
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [animeIdNumber]);
 
   useEffect(() => {
     const handlePageExit = () => {
@@ -311,7 +326,6 @@ export default function WatchPage() {
           clearSubtitleTracks(video);
           setSubtitleMode('burned');
           try {
-            window.localStorage.setItem(SUBTITLE_MODE_PREF_KEY, 'burned');
             window.localStorage.setItem(SUBTITLE_PREF_KEY, initialSubtitle);
           } catch {
             // Preference persistence is optional.
@@ -436,7 +450,11 @@ export default function WatchPage() {
 
     const nextSubtitle = event.target.value;
     const nextSubtitleTrack = getSubtitleById(subtitles, nextSubtitle);
-    const nextMode = requiresBurnedInSubtitle(nextSubtitleTrack) ? 'burned' : subtitleMode;
+    const nextMode = nextSubtitle === 'off'
+      ? 'soft'
+      : requiresBurnedInSubtitle(nextSubtitleTrack)
+        ? 'burned'
+        : 'soft';
 
     setSelectedSubtitle(nextSubtitle);
     if (nextSubtitle === 'off') {
@@ -448,32 +466,6 @@ export default function WatchPage() {
     applySubtitleSelection(videoRef.current, nextMode === 'burned' ? 'off' : nextSubtitle);
 
     try {
-      window.localStorage.setItem(SUBTITLE_PREF_KEY, nextSubtitle);
-      window.localStorage.setItem(SUBTITLE_MODE_PREF_KEY, nextSubtitle === 'off' ? 'soft' : nextMode);
-    } catch {
-      // Preference persistence is optional.
-    }
-  }
-
-  function handleSubtitleModeChange(event) {
-    if (streamLoading) return;
-
-    const nextMode = event.target.value;
-    let nextSubtitle = selectedSubtitle;
-
-    if (nextMode === 'burned' && selectedSubtitle === 'off') {
-      nextSubtitle = chooseInitialSubtitle(subtitles);
-      setSelectedSubtitle(nextSubtitle);
-    }
-
-    const nextSubtitleTrack = getSubtitleById(subtitles, nextSubtitle);
-    const effectiveMode = requiresBurnedInSubtitle(nextSubtitleTrack) ? 'burned' : nextMode;
-
-    setSubtitleMode(effectiveMode);
-    applySubtitleSelection(videoRef.current, effectiveMode === 'burned' ? 'off' : nextSubtitle);
-
-    try {
-      window.localStorage.setItem(SUBTITLE_MODE_PREF_KEY, effectiveMode);
       window.localStorage.setItem(SUBTITLE_PREF_KEY, nextSubtitle);
     } catch {
       // Preference persistence is optional.
@@ -522,6 +514,34 @@ export default function WatchPage() {
     } catch (error) {
       console.error('MPV command copy failed:', error);
       setMpvStatus('Could not copy MPV command');
+    }
+  }
+
+  async function handleWatchlistToggle() {
+    if (!Number.isFinite(animeIdNumber) || watchlistBusy) return;
+
+    const nextWatchlistState = !inWatchlist;
+    setWatchlistBusy(true);
+
+    try {
+      const res = await fetch('/api/watchlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          anime_id: animeIdNumber,
+          action: nextWatchlistState ? 'add' : 'remove',
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Watchlist update failed');
+      }
+
+      setInWatchlist(nextWatchlistState);
+    } catch (error) {
+      console.error('Watchlist update failed:', error);
+    } finally {
+      setWatchlistBusy(false);
     }
   }
 
@@ -605,15 +625,6 @@ export default function WatchPage() {
                     ))}
                   </select>
                 </label>
-                {selectedSubtitle !== 'off' && (
-                  <label className="subtitle-picker">
-                    <span>Render</span>
-                    <select value={subtitleMode} onChange={handleSubtitleModeChange} disabled={streamLoading}>
-                      <option value="soft" disabled={requiresBurnedInSubtitle(getSubtitleById(subtitles, selectedSubtitle))}>Soft</option>
-                      <option value="burned">Burned in</option>
-                    </select>
-                  </label>
-                )}
               </div>
             )}
           </div>
@@ -624,7 +635,23 @@ export default function WatchPage() {
               alt=""
             />
             <div className="player-episode-summary-copy">
-              <div className="now-playing-badge">Now Playing</div>
+              <div className="player-episode-summary-header">
+                <div className="now-playing-badge">Now Playing</div>
+                <button
+                  type="button"
+                  className={`watchlist-icon-button${inWatchlist ? ' active' : ''}`}
+                  onClick={handleWatchlistToggle}
+                  disabled={watchlistBusy}
+                  aria-label={inWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M6 4.75C6 3.78 6.78 3 7.75 3h8.5C17.22 3 18 3.78 18 4.75v15.5l-6-3.6-6 3.6V4.75Z" />
+                  </svg>
+                  <span className="watchlist-tooltip">
+                    {inWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                  </span>
+                </button>
+              </div>
               {currentEpMeta && <div className="player-episode-summary-meta">Released on {currentEpMeta}</div>}
               {currentEp.overview ? (
                 <p>{currentEp.overview}</p>

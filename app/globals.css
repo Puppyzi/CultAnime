@@ -376,6 +376,10 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
   object-fit: cover; border-radius: var(--radius-sm); background: var(--bg-tertiary);
 }
 .player-episode-summary-copy { min-width: 0; max-width: 760px; }
+.player-episode-summary-header {
+  display: flex; align-items: center; gap: 0.45rem;
+  margin-bottom: 0.35rem;
+}
 .now-playing-badge {
   display: inline-flex; align-items: center; align-self: flex-start;
   color: var(--accent); background: var(--accent-dim);
@@ -383,7 +387,49 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
   padding: 0.15rem 0.4rem; font-size: 0.62rem; font-weight: 800;
   text-transform: uppercase; letter-spacing: 0;
 }
-.player-episode-summary-copy .now-playing-badge { margin-bottom: 0.35rem; }
+.watchlist-icon-button {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 1.75rem; height: 1.75rem; border-radius: var(--radius-sm);
+  color: var(--text-secondary); background: var(--bg-tertiary);
+  border: 1px solid var(--border-hover);
+  transition: color var(--transition), border-color var(--transition), background var(--transition), transform var(--transition);
+}
+.watchlist-icon-button:hover,
+.watchlist-icon-button:focus-visible {
+  color: var(--accent); border-color: rgba(192,96,255,0.55);
+  background: var(--accent-dim); transform: translateY(-1px);
+}
+.watchlist-icon-button.active {
+  color: var(--accent); border-color: rgba(192,96,255,0.45);
+  background: var(--accent-dim);
+}
+.watchlist-icon-button:disabled { opacity: 0.65; cursor: wait; transform: none; }
+.watchlist-icon-button svg { width: 0.95rem; height: 0.95rem; }
+.watchlist-icon-button path {
+  fill: transparent; stroke: currentColor; stroke-width: 1.8;
+  stroke-linejoin: round;
+}
+.watchlist-icon-button.active path { fill: currentColor; }
+.watchlist-tooltip {
+  position: absolute; left: 50%; bottom: calc(100% + 0.55rem);
+  transform: translate(-50%, 0.25rem); z-index: 5;
+  pointer-events: none; opacity: 0;
+  white-space: nowrap; color: var(--text-primary); background: #333;
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 3px;
+  padding: 0.35rem 0.55rem; font-size: 0.72rem; font-weight: 700;
+  box-shadow: var(--shadow-md);
+  transition: opacity var(--transition), transform var(--transition);
+}
+.watchlist-tooltip::after {
+  content: ''; position: absolute; left: 50%; top: 100%;
+  transform: translateX(-50%);
+  border-left: 0.35rem solid transparent; border-right: 0.35rem solid transparent;
+  border-top: 0.35rem solid #333;
+}
+.watchlist-icon-button:hover .watchlist-tooltip,
+.watchlist-icon-button:focus-visible .watchlist-tooltip {
+  opacity: 1; transform: translate(-50%, 0);
+}
 .player-episode-summary-meta {
   color: var(--text-muted); font-size: 0.75rem; font-weight: 600; margin-bottom: 0.35rem;
 }
