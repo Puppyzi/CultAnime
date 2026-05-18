@@ -5,14 +5,14 @@ import { useRouter } from 'next/navigation';
 export default function HomePage() {
   const [anime, setAnime] = useState([]);
   const [history, setHistory] = useState([]);
-  const [featured, setFeatured] = useState(null);
+  const [featuredIndex, setFeaturedIndex] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function load() {
       try {
         const [animeRes, historyRes] = await Promise.all([
-          fetch('/api/anime?sort=created_at&order=DESC&limit=30'),
+          fetch('/api/anime?sort=created_at&order=DESC&limit=500'),
           fetch('/api/history'),
         ]);
         const animeData = await animeRes.json();
@@ -21,7 +21,7 @@ export default function HomePage() {
         setAnime(list);
         setHistory(historyData.history || []);
         if (list.length > 0) {
-          setFeatured(list[Math.floor(Math.random() * Math.min(list.length, 5))]);
+          setFeaturedIndex(Math.floor(Math.random() * list.length));
         }
       } catch (e) { console.error(e); }
       setLoading(false);
@@ -29,7 +29,18 @@ export default function HomePage() {
     load();
   }, []);
 
+  useEffect(() => {
+    if (anime.length <= 1) return;
+
+    const intervalId = setInterval(() => {
+      setFeaturedIndex(current => (current + 1) % anime.length);
+    }, 6500);
+
+    return () => clearInterval(intervalId);
+  }, [anime.length]);
+
   const popular = [...anime].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  const featured = anime[featuredIndex] || anime[0] || null;
 
   if (loading) {
     return (
@@ -59,9 +70,9 @@ export default function HomePage() {
     <>
       {featured && (
         <div className="hero">
-          <div className="hero-bg" style={{ backgroundImage: `url(${featured.banner_image || featured.cover_image})` }} />
+          <div key={`hero-bg-${featured.id}`} className="hero-bg" style={{ backgroundImage: `url(${featured.banner_image || featured.cover_image})` }} />
           <div className="hero-overlay" />
-          <div className="hero-content">
+          <div key={`hero-content-${featured.id}`} className="hero-content">
             <h1>{featured.title}</h1>
             <div className="hero-meta">
               {featured.rating && <span>⭐ {featured.rating}%</span>}

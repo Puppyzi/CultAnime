@@ -158,6 +158,7 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
 .hero-bg {
   position: absolute; inset: 0; background-size: cover;
   background-position: center 25%; filter: brightness(0.45);
+  animation: heroImageFade 700ms ease both;
 }
 .hero-overlay {
   position: absolute; inset: 0;
@@ -165,6 +166,7 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
 }
 .hero-content {
   position: relative; z-index: 2; padding: 2rem 2.5rem; max-width: 550px;
+  animation: heroContentRise 600ms ease both;
 }
 .hero-content h1 {
   font-size: 2rem; font-weight: 800; line-height: 1.15;
@@ -502,6 +504,15 @@ textarea.form-input { resize: vertical; min-height: 70px; }
 .toast.success { border-color: rgba(74,222,128,0.3); }
 .toast.error { border-color: rgba(248,113,113,0.3); }
 @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+@keyframes heroImageFade {
+  from { opacity: 0.25; transform: scale(1.015); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes heroContentRise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 @keyframes cardFlipOut {
   0% { transform: perspective(800px) rotateY(0deg) scale(1); opacity: 1; }
