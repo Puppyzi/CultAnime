@@ -376,6 +376,14 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
   object-fit: cover; border-radius: var(--radius-sm); background: var(--bg-tertiary);
 }
 .player-episode-summary-copy { min-width: 0; max-width: 760px; }
+.now-playing-badge {
+  display: inline-flex; align-items: center; align-self: flex-start;
+  color: var(--accent); background: var(--accent-dim);
+  border: 1px solid rgba(186,90,255,0.35); border-radius: 3px;
+  padding: 0.15rem 0.4rem; font-size: 0.62rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0;
+}
+.player-episode-summary-copy .now-playing-badge { margin-bottom: 0.35rem; }
 .player-episode-summary-meta {
   color: var(--text-muted); font-size: 0.75rem; font-weight: 600; margin-bottom: 0.35rem;
 }
@@ -452,6 +460,9 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
 }
 .player-episode-item .episode-meta {
   font-size: 0.66rem;
+}
+.sidebar-now-playing {
+  font-size: 0.58rem; padding: 0.1rem 0.3rem;
 }
 
 /* ---- BROWSE ---- */

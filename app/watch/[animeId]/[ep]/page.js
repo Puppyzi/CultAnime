@@ -624,7 +624,8 @@ export default function WatchPage() {
               alt=""
             />
             <div className="player-episode-summary-copy">
-              {currentEpMeta && <div className="player-episode-summary-meta">{currentEpMeta}</div>}
+              <div className="now-playing-badge">Now Playing</div>
+              {currentEpMeta && <div className="player-episode-summary-meta">Released on {currentEpMeta}</div>}
               {currentEp.overview ? (
                 <p>{currentEp.overview}</p>
               ) : (
@@ -685,10 +686,11 @@ export default function WatchPage() {
                 loading="lazy"
               />
               <span className="episode-number">{e.episode_number}</span>
-              <span className="episode-copy player-episode-copy">
-                <span className="episode-title">{e.title || `Episode ${e.episode_number}`}</span>
-                {meta && <span className="episode-meta">{meta}</span>}
-              </span>
+                <span className="episode-copy player-episode-copy">
+                  <span className="episode-title">{e.title || `Episode ${e.episode_number}`}</span>
+                  {e.episode_number === episodeNum && <span className="now-playing-badge sidebar-now-playing">Now Playing</span>}
+                  {meta && <span className="episode-meta">{meta}</span>}
+                </span>
               {e.episode_number === episodeNum && <span style={{ color: 'var(--accent)' }}>▶</span>}
             </Link>
             );
