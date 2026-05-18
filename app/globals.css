@@ -338,9 +338,45 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
 .player-info { padding: 1.25rem 1.5rem; background: var(--bg-primary); }
 .player-info h1 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.15rem; }
 .player-info .episode-label { color: var(--accent); font-size: 0.8rem; font-weight: 600; }
+.player-meta-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.75rem; flex-wrap: wrap;
+}
+.subtitle-controls {
+  display: flex; align-items: center; justify-content: flex-end;
+  gap: 0.5rem; flex-wrap: wrap;
+}
+.subtitle-picker {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  color: var(--text-secondary); font-size: 0.75rem; font-weight: 600;
+}
+.subtitle-picker select {
+  min-width: 180px; max-width: min(320px, 70vw);
+  padding: 0.35rem 2rem 0.35rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  outline: none;
+}
+.subtitle-picker select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+.subtitle-picker select:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
 .player-nav {
   display: flex; gap: 0.75rem; margin-top: 0.75rem;
   padding-top: 0.75rem; border-top: 1px solid var(--border);
+}
+.external-player-actions {
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+}
+.external-player-status {
+  color: var(--text-secondary); font-size: 0.72rem; font-weight: 500;
 }
 .player-sidebar {
   background: var(--bg-primary); border-left: 1px solid var(--border);
