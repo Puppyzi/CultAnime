@@ -7,9 +7,9 @@ services:
     environment:
       - TZ=Etc/UTC
     volumes:
-      # Map the Fast SSD for the SQLite database and config
+      # SQLite database and config
       - /mnt/Fast_SSD/cultanime_data:/app/data
-      # Map the Storage HDD for the anime media files (Read-Only to protect your files)
+      # Anime media folder mounted read-only
       - /mnt/Storage_HDD/media/anime:/anime:ro
     ports:
       - 3000:3000
