@@ -38,9 +38,13 @@ MEDIA_ROOT=/anime
 JELLYFIN_MEDIA_ROOT=/media/anime
 MEDIA_RESCAN_DEBOUNCE_MS=60000
 JELLYFIN_RESCAN_SETTLE_MS=10000
+PUID=568
+PGID=568
 ```
 
 `MEDIA_ROOT` is the path CultAnime can read inside its runtime. `JELLYFIN_MEDIA_ROOT` is the path Jellyfin sees for that same folder. After the watcher sees a change, it waits for the folder to be quiet, asks Jellyfin to rescan the affected series folder, then runs the CultAnime sync.
+
+`PUID` and `PGID` control the Linux user that runs the app inside Docker. On TrueNAS SCALE, `568:568` is commonly used for app datasets. Set these to the owner of the folder mounted at `/app/data` so SQLite can create `cultanime.db`.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

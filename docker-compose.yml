@@ -6,9 +6,6 @@ services:
       - .env.production
     environment:
       - TZ=Etc/UTC
-      # If you need the container to run as a specific user to fix TrueNAS permissions:
-      # - PUID=1000
-      # - PGID=1000
     volumes:
       # Map the Fast SSD for the SQLite database and config
       - /mnt/Fast_SSD/cultanime_data:/app/data

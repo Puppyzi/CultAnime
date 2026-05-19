@@ -31,28 +31,26 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN apk add --no-cache su-exec
 
 RUN mkdir .next
-RUN chown nextjs:nodejs .next
 
 # Automatically leverage output traces to reduce image size
 # https://nextjs.org/docs/advanced-features/output-file-tracing
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
-# Since better-sqlite3 often creates a database file on disk, we make sure the app directory
-# is writable for the nextjs user, or at least a specific data folder if preferred.
-RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
-
-USER nextjs
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh && mkdir -p /app/data /app/.next/cache
 
 EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+ENV PUID=1001
+ENV PGID=1001
 
 # server.js is created by next build from the standalone output
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["node", "server.js"]
