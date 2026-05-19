@@ -49,6 +49,9 @@ export default function AdminPage() {
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncResults, setSyncResults] = useState(null);
   const [syncing, setSyncing] = useState(false);
+  const [rescanStatus, setRescanStatus] = useState(null);
+  const [rescanLoading, setRescanLoading] = useState(false);
+  const [rescanStarting, setRescanStarting] = useState(false);
   const [editingEpisodeId, setEditingEpisodeId] = useState(null);
   const [episodeEditForm, setEpisodeEditForm] = useState(emptyEpisodeEditForm);
 
@@ -62,7 +65,18 @@ export default function AdminPage() {
   // Episode form
   const [epForm, setEpForm] = useState({ anime_id: '', episode_number: '', title: '', file_path: '' });
 
-  useEffect(() => { loadAnimeList(); }, []);
+  useEffect(() => {
+    loadAnimeList();
+    loadRescanStatus({ silent: true });
+  }, []);
+
+  useEffect(() => {
+    if (tab !== 'sync') return undefined;
+
+    loadRescanStatus({ silent: true });
+    const interval = window.setInterval(() => loadRescanStatus({ silent: true }), 5000);
+    return () => window.clearInterval(interval);
+  }, [tab]);
 
   async function loadAnimeList() {
     const res = await fetch('/api/anime?limit=100');
@@ -307,6 +321,41 @@ export default function AdminPage() {
     setSyncing(false);
   }
 
+  async function loadRescanStatus({ silent = false } = {}) {
+    if (!silent) setRescanLoading(true);
+    try {
+      const res = await fetch('/api/admin/rescan');
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || `Server error (${res.status})`);
+      }
+      setRescanStatus(data);
+    } catch (err) {
+      if (!silent) showToast('Rescan status failed: ' + err.message, 'error');
+    }
+    if (!silent) setRescanLoading(false);
+  }
+
+  async function triggerFullRescan() {
+    setRescanStarting(true);
+    try {
+      const res = await fetch('/api/admin/rescan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fullRefresh: true, reason: 'admin-manual', syncAfter: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || `Server error (${res.status})`);
+      }
+      setRescanStatus(data);
+      showToast('Jellyfin rescan job queued.');
+    } catch (err) {
+      showToast('Rescan failed: ' + err.message, 'error');
+    }
+    setRescanStarting(false);
+  }
+
   const tabs = [
     { id: 'sync', label: '🔄 Sync Library' },
     { id: 'add', label: '➕ Add Anime' },
@@ -330,6 +379,75 @@ export default function AdminPage() {
       {/* SYNC LIBRARY TAB */}
       {tab === 'sync' && (
         <div>
+          <div className="admin-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+              <div>
+                <h3 style={{ margin: 0 }}>Automatic Jellyfin Rescan</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                  Watches your media folder for completed file changes, batches them, tells Jellyfin to rescan, then syncs CultAnime.
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button className="btn btn-secondary" onClick={() => loadRescanStatus()} disabled={rescanLoading}>
+                  {rescanLoading ? 'Checking...' : 'Refresh Status'}
+                </button>
+                <button className="btn btn-primary" onClick={triggerFullRescan} disabled={rescanStarting}>
+                  {rescanStarting ? 'Queueing...' : 'Force Full Rescan'}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+              <div style={{ background: 'var(--bg-tertiary)', padding: '0.75rem 1rem', borderRadius: 'var(--radius)', flex: 1, minWidth: '150px' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>Watcher</div>
+                <div style={{
+                  fontWeight: 800,
+                  color: rescanStatus?.watcher?.started ? '#22c55e' : rescanStatus?.watcher?.enabled === false ? 'var(--text-muted)' : 'var(--text-secondary)',
+                }}>
+                  {rescanStatus?.watcher?.started ? 'Running' : rescanStatus?.watcher?.enabled === false ? 'Disabled' : 'Not Started'}
+                </div>
+              </div>
+              <div style={{ background: 'var(--bg-tertiary)', padding: '0.75rem 1rem', borderRadius: 'var(--radius)', flex: 1, minWidth: '150px' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>Watched Directories</div>
+                <div style={{ fontWeight: 800 }}>{rescanStatus?.watcher?.watchedDirectories ?? 0}</div>
+              </div>
+              <div style={{ background: 'var(--bg-tertiary)', padding: '0.75rem 1rem', borderRadius: 'var(--radius)', flex: 1, minWidth: '150px' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>Pending Changes</div>
+                <div style={{ fontWeight: 800 }}>{rescanStatus?.watcher?.pendingUpdates?.length ?? 0}</div>
+              </div>
+            </div>
+
+            {rescanStatus?.watcher?.lastError && (
+              <div style={{ padding: '0.75rem', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.25)', borderRadius: 'var(--radius)', color: '#fca5a5', fontSize: '0.82rem', marginBottom: '1rem' }}>
+                {rescanStatus.watcher.lastError}
+              </div>
+            )}
+
+            {rescanStatus?.watcher?.enabled === false && (
+              <div style={{ padding: '0.75rem', background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.2)', borderRadius: 'var(--radius)', color: 'var(--text-secondary)', fontSize: '0.82rem', marginBottom: '1rem' }}>
+                Local development mode is active. Automatic folder watching is disabled here and should be enabled on the server where the anime files are mounted.
+              </div>
+            )}
+
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'grid', gap: '0.25rem', marginBottom: '1rem' }}>
+              <div><strong>Media root:</strong> {rescanStatus?.watcher?.root || 'Not configured'}</div>
+              <div><strong>Jellyfin path:</strong> {rescanStatus?.watcher?.jellyfinRoot || 'Not configured'}</div>
+              <div><strong>Quiet window:</strong> {Math.round((rescanStatus?.watcher?.debounceMs || 0) / 1000)}s before rescanning</div>
+            </div>
+
+            {rescanStatus?.jobs?.length > 0 && (
+              <div style={{ background: 'var(--bg-tertiary)', borderRadius: 'var(--radius)', padding: '0.75rem' }}>
+                <h4 style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>Recent Rescan Jobs</h4>
+                {rescanStatus.jobs.slice(0, 5).map(job => (
+                  <div key={job.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '0.45rem 0', borderBottom: '1px solid var(--border)', fontSize: '0.78rem' }}>
+                    <span>{job.reason} - {job.updates?.length || (job.fullRefresh ? 1 : 0)} path{(job.updates?.length || 0) === 1 ? '' : 's'}</span>
+                    <span style={{ color: job.status === 'error' ? '#f87171' : job.status === 'completed' ? '#22c55e' : 'var(--accent)' }}>{job.status}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="admin-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <div>

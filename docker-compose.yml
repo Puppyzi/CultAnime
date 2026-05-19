@@ -2,9 +2,10 @@ services:
   cultanime:
     build: .
     container_name: cultanime
+    env_file:
+      - .env.production
     environment:
       - TZ=Etc/UTC
-      - MEDIA_ROOT=/anime
       # If you need the container to run as a specific user to fix TrueNAS permissions:
       # - PUID=1000
       # - PGID=1000
