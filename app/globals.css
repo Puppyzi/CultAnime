@@ -368,21 +368,41 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
 .player-main { background: #000; display: flex; flex-direction: column; min-width: 0; }
 .video-container { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; }
 .video-container video { width: 100%; height: 100%; }
-.player-info { padding: 1.25rem 1.5rem; background: var(--bg-primary); }
-.player-info h1 { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.15rem; }
-.player-info .episode-label { color: var(--accent); font-size: 0.8rem; font-weight: 600; }
+.player-info {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem 1rem; align-items: center;
+  padding: 0.75rem 1.5rem 0.85rem; background: var(--bg-primary);
+}
+.player-info-header {
+  grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem; align-items: end;
+  padding-bottom: 0.55rem; border-bottom: 1px solid var(--border);
+}
+.player-title-block { min-width: 0; }
+.player-back-link {
+  display: inline-flex; color: var(--text-secondary); font-size: 0.78rem;
+  margin-bottom: 0.15rem;
+}
+.player-title-row {
+  display: flex; align-items: baseline; gap: 0.55rem; flex-wrap: wrap; min-width: 0;
+}
+.player-info h1 {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 1rem; line-height: 1.2; font-weight: 700; margin: 0;
+}
+.player-info .episode-label { color: var(--accent); font-size: 0.78rem; font-weight: 700; white-space: nowrap; }
 .player-episode-summary {
-  display: flex; gap: 0.9rem; align-items: flex-start;
-  margin-top: 0.85rem; padding-top: 0.85rem; border-top: 1px solid var(--border);
+  grid-column: 1; display: grid; grid-template-columns: 128px minmax(0, 1fr);
+  gap: 0.7rem; align-items: center; min-width: 0;
 }
 .player-episode-thumbnail {
-  width: 168px; aspect-ratio: 16/9; flex: 0 0 168px;
+  width: 128px; aspect-ratio: 16/9; flex: 0 0 128px;
   object-fit: cover; border-radius: var(--radius-sm); background: var(--bg-tertiary);
 }
-.player-episode-summary-copy { min-width: 0; max-width: 760px; }
+.player-episode-summary-copy { min-width: 0; max-width: none; }
 .player-episode-summary-header {
   display: flex; align-items: center; gap: 0.45rem;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.25rem;
 }
 .now-playing-badge {
   display: inline-flex; align-items: center; align-self: flex-start;
@@ -435,11 +455,11 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
   opacity: 1; transform: translate(-50%, 0);
 }
 .player-episode-summary-meta {
-  color: var(--text-muted); font-size: 0.75rem; font-weight: 600; margin-bottom: 0.35rem;
+  color: var(--text-muted); font-size: 0.72rem; font-weight: 600; margin-bottom: 0.2rem;
 }
 .player-episode-summary p {
-  color: var(--text-secondary); font-size: 0.8rem; line-height: 1.55;
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  color: var(--text-secondary); font-size: 0.78rem; line-height: 1.45;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden;
 }
 .player-meta-row {
@@ -478,14 +498,19 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
   opacity: 0.65;
 }
 .player-nav {
-  display: flex; gap: 0.75rem; margin-top: 0.75rem;
-  padding-top: 0.75rem; border-top: 1px solid var(--border);
+  grid-column: 2; display: flex !important; flex-direction: column;
+  justify-content: center; align-items: flex-end !important; gap: 0.45rem !important;
+  min-width: min(360px, 32vw); margin-top: 0;
+  padding-top: 0; border-top: 0;
 }
 .external-player-actions {
-  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+  display: flex; align-items: center; justify-content: flex-end; gap: 0.4rem; flex-wrap: wrap;
 }
 .external-player-status {
   color: var(--text-secondary); font-size: 0.72rem; font-weight: 500;
+}
+.player-nav-buttons {
+  display: flex; justify-content: flex-end; gap: 0.45rem; flex-wrap: wrap;
 }
 .player-sidebar {
   background: var(--bg-primary); border-left: 1px solid var(--border);
@@ -680,6 +705,13 @@ textarea.form-input { resize: vertical; min-height: 70px; }
   .home-layout { grid-template-columns: 1fr; }
   .home-sidebar { display: none; }
   .player-page { grid-template-columns: 1fr; }
+  .player-info { grid-template-columns: 1fr; }
+  .player-nav {
+    grid-column: 1; min-width: 0; flex-direction: row;
+    justify-content: space-between; align-items: center !important;
+  }
+  .external-player-actions { justify-content: flex-start; }
+  .player-nav-buttons { margin-left: auto; }
   .player-sidebar { max-height: 350px; border-left: none; border-top: 1px solid var(--border); }
   .anime-detail-content { grid-template-columns: 160px 1fr; }
   .section, .browse-page, .admin-page, .watchlist-page { padding: 1.25rem 1.25rem; }
@@ -691,8 +723,14 @@ textarea.form-input { resize: vertical; min-height: 70px; }
   .episode-metadata-grid { grid-template-columns: 1fr; }
   .episode-detail-item { align-items: flex-start; }
   .episode-thumbnail { width: 112px; flex-basis: 112px; }
-  .player-episode-summary { flex-direction: column; }
+  .player-info-header { grid-template-columns: 1fr; align-items: start; }
+  .player-title-row { align-items: flex-start; }
+  .player-info h1 { white-space: normal; }
+  .media-controls { justify-content: flex-start; }
+  .player-episode-summary { grid-template-columns: 1fr; }
   .player-episode-thumbnail { width: min(100%, 260px); flex-basis: auto; }
+  .player-nav { align-items: flex-start !important; }
+  .player-nav-buttons { margin-left: 0; }
   .navbar { padding: 0 0.75rem; }
   .navbar-search input { width: 140px; }
   .navbar-search input:focus { width: 180px; }

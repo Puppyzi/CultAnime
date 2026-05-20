@@ -723,12 +723,16 @@ export default function WatchPage() {
           )}
         </div>
         <div className="player-info">
-          <Link href={`/anime/${animeId}`} style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+          <div className="player-info-header">
+            <div className="player-title-block">
+              <Link href={`/anime/${animeId}`} className="player-back-link">
             ← {anime.title}
-          </Link>
-          <h1>{currentEp.title || `Episode ${currentEp.episode_number}`}</h1>
-          <div className="player-meta-row">
-            <span className="episode-label">Episode {currentEp.episode_number}{anime.episodes_total ? ` of ${anime.episodes_total}` : ''}</span>
+              </Link>
+              <div className="player-title-row">
+                <h1>{currentEp.title || `Episode ${currentEp.episode_number}`}</h1>
+                <span className="episode-label">Episode {currentEp.episode_number}{anime.episodes_total ? ` of ${anime.episodes_total}` : ''}</span>
+              </div>
+            </div>
             {(audioTracks.length > 1 || subtitles.length > 0) && (
               <div className="media-controls">
                 {audioTracks.length > 1 && (
@@ -793,6 +797,14 @@ export default function WatchPage() {
             </div>
           </div>
           <div className="player-nav" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className="player-nav-buttons">
+              {prevEp && (
+              <Link href={`/watch/${animeId}/${prevEp.episode_number}`} className="btn btn-secondary btn-sm">← Previous</Link>
+            )}
+              {nextEp && (
+              <Link href={`/watch/${animeId}/${nextEp.episode_number}`} className="btn btn-primary btn-sm">Next →</Link>
+              )}
+            </div>
             <div className="external-player-actions">
               <a
                 href={`/api/mpv/${currentEp.id}?format=playlist`}
@@ -818,13 +830,6 @@ export default function WatchPage() {
               </a>
               {mpvStatus && <span className="external-player-status">{mpvStatus}</span>}
             </div>
-            <div style={{ flex: 1 }} />
-            {prevEp && (
-              <Link href={`/watch/${animeId}/${prevEp.episode_number}`} className="btn btn-secondary btn-sm">← Previous</Link>
-            )}
-            {nextEp && (
-              <Link href={`/watch/${animeId}/${nextEp.episode_number}`} className="btn btn-primary btn-sm">Next →</Link>
-            )}
           </div>
         </div>
       </div>
