@@ -51,7 +51,7 @@ export default function AdminLoginPage() {
     <div className="admin-login-page">
       <form className="admin-login-card" onSubmit={handleSubmit}>
         <div className="admin-login-kicker">Admin Access</div>
-        <h1>Sign in to CultAnime</h1>
+        <h1>Sign in to cultAnime</h1>
         <div className="form-group">
           <label>Admin Password</label>
           <input
