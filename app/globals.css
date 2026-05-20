@@ -824,8 +824,12 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
 
 /* ---- ADMIN ---- */
 .admin-page { padding: 1.5rem 2.5rem; max-width: 1100px; margin: 0 auto; }
+.admin-page-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 1rem; margin-bottom: 1.5rem;
+}
 .admin-page h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.3rem; }
-.admin-page .subtitle { color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.85rem; }
+.admin-page .subtitle { color: var(--text-secondary); font-size: 0.85rem; }
 .admin-tabs { display: flex; gap: 0; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); }
 .admin-tab {
   padding: 0.6rem 1rem; font-weight: 500; font-size: 0.82rem;
@@ -895,6 +899,31 @@ textarea.form-input { resize: vertical; min-height: 70px; }
 }
 .episode-metadata-actions {
   display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.25rem;
+}
+
+.admin-login-page {
+  min-height: calc(100vh - var(--nav-height));
+  display: grid; place-items: center;
+  padding: 2rem;
+}
+.admin-login-card {
+  width: min(100%, 420px);
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 1.5rem;
+  box-shadow: var(--shadow-lg);
+}
+.admin-login-kicker {
+  color: var(--accent); font-size: 0.72rem; font-weight: 800;
+  text-transform: uppercase; margin-bottom: 0.35rem;
+}
+.admin-login-card h1 {
+  font-size: 1.35rem; font-weight: 800; margin-bottom: 1.25rem;
+}
+.admin-login-error {
+  color: var(--red); background: rgba(248,113,113,0.08);
+  border: 1px solid rgba(248,113,113,0.2);
+  border-radius: var(--radius-sm); padding: 0.6rem 0.75rem;
+  font-size: 0.78rem; font-weight: 600; margin-bottom: 0.75rem;
 }
 
 /* ---- WATCHLIST ---- */

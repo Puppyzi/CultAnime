@@ -48,6 +48,8 @@ CultAnime also runs a Jellyfin reconciliation loop by default. `LIBRARY_RECONCIL
 
 On the server, `LOCAL_MEDIA_PRUNE_ENABLED=true` lets CultAnime remove episode rows when the underlying media files are gone from `MEDIA_ROOT`. If every episode appears missing at once, CultAnime skips local pruning unless `LOCAL_MEDIA_PRUNE_ALLOW_MASS_DELETE=true`, which protects against an accidentally unmounted media folder.
 
+The admin page and `/api/admin/*` routes are protected by `ADMIN_PASSWORD`. After a successful login, CultAnime sets a signed HTTP-only admin session cookie. The cookie is marked secure automatically when the request is HTTPS or includes `x-forwarded-proto=https`; set `ADMIN_COOKIE_SECURE=true` only if your HTTPS proxy does not pass that header.
+
 `PUID` and `PGID` control the Linux user that runs the app inside Docker. On TrueNAS SCALE, `568:568` is commonly used for app datasets. Set these to the owner of the folder mounted at `/app/data` so SQLite can create `cultanime.db`.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

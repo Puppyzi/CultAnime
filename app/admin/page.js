@@ -389,6 +389,11 @@ export default function AdminPage() {
     setRescanStarting(false);
   }
 
+  async function logoutAdmin() {
+    await fetch('/api/admin/auth', { method: 'DELETE' });
+    window.location.href = '/admin/login';
+  }
+
   const tabs = [
     { id: 'sync', label: '🔄 Sync Library' },
     { id: 'add', label: '➕ Add Anime' },
@@ -398,8 +403,15 @@ export default function AdminPage() {
 
   return (
     <div className="admin-page">
-      <h1>Admin Panel</h1>
-      <p className="subtitle">Manage your anime library</p>
+      <div className="admin-page-header">
+        <div>
+          <h1>Admin Panel</h1>
+          <p className="subtitle">Manage your anime library</p>
+        </div>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={logoutAdmin}>
+          Logout
+        </button>
+      </div>
 
       <div className="admin-tabs">
         {tabs.map(t => (
