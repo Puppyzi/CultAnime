@@ -44,7 +44,9 @@ export default function Navbar() {
 
   return (
     <nav className="navbar">
-      <Link href="/" className="navbar-logo">CultAnime</Link>
+      <Link href="/" className="navbar-logo">
+        <span>Cult</span><span className="navbar-logo-anime">Anime</span>
+      </Link>
       <div className="navbar-links">
         {navLinks.map(l => (
           <Link key={l.href} href={l.href}

@@ -76,7 +76,11 @@ input, textarea, select { font-family: inherit; }
   margin-right: 1rem; white-space: nowrap;
   transition: color var(--transition);
 }
+.navbar-logo-anime { color: #1aa7e8; }
 .navbar-logo:hover {
+  color: #ffffff;
+}
+.navbar-logo:hover .navbar-logo-anime {
   color: #ffffff;
 }
 .navbar-links { display: flex; gap: 0.25rem; align-items: center; }
