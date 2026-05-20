@@ -6,6 +6,45 @@ import { useParams, useRouter } from 'next/navigation';
 const SUBTITLE_PREF_KEY = 'cultanime.subtitleTrack';
 const AUDIO_PREF_KEY = 'cultanime.audioTrack';
 
+function mediaPreferenceKey(baseKey, animeId) {
+  return animeId ? `${baseKey}.${animeId}` : baseKey;
+}
+
+function readMediaPreference(baseKey, animeId) {
+  try {
+    const key = mediaPreferenceKey(baseKey, animeId);
+    const scoped = window.localStorage.getItem(key);
+    if (scoped !== null) return scoped;
+
+    const legacy = window.localStorage.getItem(baseKey);
+    if (legacy !== null && animeId) {
+      window.localStorage.setItem(key, legacy);
+      window.localStorage.removeItem(baseKey);
+      return legacy;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function writeMediaPreference(baseKey, animeId, value) {
+  try {
+    window.localStorage.setItem(mediaPreferenceKey(baseKey, animeId), value);
+  } catch {
+    // Preference persistence is optional.
+  }
+}
+
+function removeMediaPreference(baseKey, animeId) {
+  try {
+    window.localStorage.removeItem(mediaPreferenceKey(baseKey, animeId));
+  } catch {
+    // Preference persistence is optional.
+  }
+}
+
 function episodeThumbnailUrl(ep, width = 320, height = 180) {
   return `/api/thumbnail/${ep.id}?width=${width}&height=${height}`;
 }
@@ -70,15 +109,11 @@ function isFullSubtitle(subtitle) {
   return text.includes('full') || text.includes('dialog') || text.includes('dialogue');
 }
 
-function chooseInitialAudioTrack(audioTracks) {
+function chooseInitialAudioTrack(audioTracks, animeId) {
   if (!audioTracks.length) return 'default';
 
-  try {
-    const saved = window.localStorage.getItem(AUDIO_PREF_KEY);
-    if (saved && audioTracks.some(track => getAudioTrackId(track) === saved)) return saved;
-  } catch {
-    // Preference persistence is optional.
-  }
+  const saved = readMediaPreference(AUDIO_PREF_KEY, animeId);
+  if (saved && audioTracks.some(track => getAudioTrackId(track) === saved)) return saved;
 
   const japaneseTrack = audioTracks.find(isJapaneseAudioTrack);
   return japaneseTrack ? getAudioTrackId(japaneseTrack) : 'default';
@@ -89,23 +124,19 @@ function requiresBurnedInSubtitle(subtitle) {
   return codec === 'ass' || codec === 'ssa';
 }
 
-function chooseInitialSubtitle(subtitles) {
+function chooseInitialSubtitle(subtitles, animeId) {
   if (!subtitles.length) return 'off';
+
+  const saved = readMediaPreference(SUBTITLE_PREF_KEY, animeId);
+  if (saved === 'off') return 'off';
+
+  const savedSubtitle = subtitles.find(sub => getSubtitleId(sub) === saved);
+  if (savedSubtitle) return saved;
 
   const preferredSubtitle = subtitles.find(sub => isEnglishSubtitle(sub) && isFullSubtitle(sub) && !isSignsOnlySubtitle(sub))
     || subtitles.find(sub => isEnglishSubtitle(sub) && !isSignsOnlySubtitle(sub))
     || subtitles.find(sub => isFullSubtitle(sub) && !isSignsOnlySubtitle(sub))
     || subtitles.find(sub => isEnglishSubtitle(sub));
-
-  try {
-    const saved = window.localStorage.getItem(SUBTITLE_PREF_KEY);
-    const savedSubtitle = subtitles.find(sub => getSubtitleId(sub) === saved);
-    if (savedSubtitle && (!isSignsOnlySubtitle(savedSubtitle) || !preferredSubtitle)) {
-      return saved;
-    }
-  } catch {
-    // localStorage can be unavailable in private browsing modes.
-  }
 
   const defaultSubtitle = preferredSubtitle
     || subtitles.find(sub => sub.isDefault)
@@ -217,7 +248,7 @@ export default function WatchPage() {
   const [audioTracks, setAudioTracks] = useState([]);
   const [selectedAudioTrack, setSelectedAudioTrack] = useState('default');
   const [subtitles, setSubtitles] = useState([]);
-  const [selectedSubtitle, setSelectedSubtitle] = useState('off');
+  const [selectedSubtitle, setSelectedSubtitle] = useState('auto');
   const [subtitleMode, setSubtitleMode] = useState('soft');
   const [mpvStatus, setMpvStatus] = useState('');
   const [inWatchlist, setInWatchlist] = useState(false);
@@ -245,6 +276,12 @@ export default function WatchPage() {
     hlsRef.current = null;
     resetVideoElement(video || videoRef.current);
   }, []);
+
+  useEffect(() => {
+    setSelectedAudioTrack(readMediaPreference(AUDIO_PREF_KEY, animeId) || 'default');
+    setSelectedSubtitle(readMediaPreference(SUBTITLE_PREF_KEY, animeId) || 'auto');
+    setSubtitleMode('soft');
+  }, [animeId]);
 
   // Load anime data
   useEffect(() => {
@@ -341,12 +378,12 @@ export default function WatchPage() {
         if (selectedAudioTrack !== 'default') {
           streamParams.set('audioStreamIndex', selectedAudioTrack);
         }
-        if (selectedSubtitle === 'off' && subtitles.length > 0) {
+        if (selectedSubtitle === 'off') {
           streamParams.set('subtitleMode', 'off');
-        } else if (subtitleMode === 'burned' && selectedSubtitle !== 'off') {
+        } else if (subtitleMode === 'burned' && selectedSubtitle !== 'off' && selectedSubtitle !== 'auto') {
           streamParams.set('subtitleMode', 'burned');
           streamParams.set('subtitleStreamIndex', selectedSubtitle);
-        } else if (selectedSubtitle !== 'off') {
+        } else if (selectedSubtitle !== 'auto') {
           streamParams.set('subtitleMode', 'soft');
           streamParams.set('subtitleStreamIndex', selectedSubtitle);
         }
@@ -374,7 +411,7 @@ export default function WatchPage() {
         const selectedAudioExists = selectedAudioTrack !== 'default'
           && audioTrackOptions.some(track => getAudioTrackId(track) === selectedAudioTrack);
         const initialAudioTrack = selectedAudioTrack === 'default'
-          ? chooseInitialAudioTrack(audioTrackOptions)
+          ? chooseInitialAudioTrack(audioTrackOptions, animeId)
           : selectedAudioExists
             ? selectedAudioTrack
             : 'default';
@@ -385,9 +422,9 @@ export default function WatchPage() {
           ? String(data.burnedInSubtitleIndex)
           : isSubtitleOffStream
             ? 'off'
-          : selectedSubtitleExists
+          : selectedSubtitle !== 'auto' && selectedSubtitleExists
             ? selectedSubtitle
-            : chooseInitialSubtitle(subtitleTracks);
+            : chooseInitialSubtitle(subtitleTracks, animeId);
         const initialSubtitleTrack = getSubtitleById(subtitleTracks, initialSubtitle);
 
         setAudioTracks(audioTrackOptions);
@@ -401,11 +438,6 @@ export default function WatchPage() {
         if (!isBurnedInStream && requiresBurnedInSubtitle(initialSubtitleTrack)) {
           clearSubtitleTracks(video);
           setSubtitleMode('burned');
-          try {
-            window.localStorage.setItem(SUBTITLE_PREF_KEY, initialSubtitle);
-          } catch {
-            // Preference persistence is optional.
-          }
           return;
         }
         setSubtitleMode(isBurnedInStream ? 'burned' : 'soft');
@@ -514,7 +546,7 @@ export default function WatchPage() {
       abortController.abort();
       teardownPlayer(ownedVideo);
     };
-  }, [currentEp, selectedAudioTrack, subtitleMode, burnedSubtitleKey, teardownPlayer]);
+  }, [currentEp, selectedAudioTrack, subtitleMode, burnedSubtitleKey, teardownPlayer, animeId]);
 
   useEffect(() => {
     const softSubtitle = subtitleMode === 'burned' ? 'off' : selectedSubtitle;
@@ -541,11 +573,7 @@ export default function WatchPage() {
     }
     applySubtitleSelection(videoRef.current, nextMode === 'burned' ? 'off' : nextSubtitle);
 
-    try {
-      window.localStorage.setItem(SUBTITLE_PREF_KEY, nextSubtitle);
-    } catch {
-      // Preference persistence is optional.
-    }
+    writeMediaPreference(SUBTITLE_PREF_KEY, animeId, nextSubtitle);
   }
 
   function handleAudioTrackChange(event) {
@@ -554,14 +582,10 @@ export default function WatchPage() {
     const nextAudioTrack = event.target.value;
     setSelectedAudioTrack(nextAudioTrack);
 
-    try {
-      if (nextAudioTrack === 'default') {
-        window.localStorage.removeItem(AUDIO_PREF_KEY);
-      } else {
-        window.localStorage.setItem(AUDIO_PREF_KEY, nextAudioTrack);
-      }
-    } catch {
-      // Preference persistence is optional.
+    if (nextAudioTrack === 'default') {
+      removeMediaPreference(AUDIO_PREF_KEY, animeId);
+    } else {
+      writeMediaPreference(AUDIO_PREF_KEY, animeId, nextAudioTrack);
     }
   }
 
