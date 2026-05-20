@@ -62,7 +62,7 @@ export default function Navbar() {
           )
         ))}
       </div>
-      <span>1.2</span>
+      <span>1.3</span>
       <div className="navbar-search" ref={searchRef}>
         <span className="search-icon">🔍</span>
         <input
