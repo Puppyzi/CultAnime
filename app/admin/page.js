@@ -365,6 +365,30 @@ export default function AdminPage() {
     setRescanStarting(false);
   }
 
+  async function triggerLibraryReconcile() {
+    setRescanStarting(true);
+    try {
+      const res = await fetch('/api/admin/rescan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reconcile: true, force: true, reason: 'admin-manual-reconcile' }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || `Server error (${res.status})`);
+      }
+      setRescanStatus(data);
+      loadAnimeList();
+      loadSyncPreview();
+      const removed = data.reconcile?.result?.removed_count || 0;
+      const episodesRemoved = data.reconcile?.result?.results?.reduce((total, item) => total + (item.episodes_removed || 0), 0) || 0;
+      showToast(`Library reconciled. ${removed} anime removed, ${episodesRemoved} episodes removed.`);
+    } catch (err) {
+      showToast('Reconcile failed: ' + err.message, 'error');
+    }
+    setRescanStarting(false);
+  }
+
   const tabs = [
     { id: 'sync', label: '🔄 Sync Library' },
     { id: 'add', label: '➕ Add Anime' },
@@ -400,6 +424,9 @@ export default function AdminPage() {
                 <button className="btn btn-secondary" onClick={() => loadRescanStatus()} disabled={rescanLoading}>
                   {rescanLoading ? 'Checking...' : 'Refresh Status'}
                 </button>
+                <button className="btn btn-secondary" onClick={triggerLibraryReconcile} disabled={rescanStarting}>
+                  {rescanStarting ? 'Checking...' : 'Reconcile Library'}
+                </button>
                 <button className="btn btn-primary" onClick={triggerFullRescan} disabled={rescanStarting}>
                   {rescanStarting ? 'Queueing...' : 'Force Full Rescan'}
                 </button>
@@ -419,6 +446,15 @@ export default function AdminPage() {
               <div style={{ background: 'var(--bg-tertiary)', padding: '0.75rem 1rem', borderRadius: 'var(--radius)', flex: 1, minWidth: '150px' }}>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>Watched Directories</div>
                 <div style={{ fontWeight: 800 }}>{rescanStatus?.watcher?.watchedDirectories ?? 0}</div>
+              </div>
+              <div style={{ background: 'var(--bg-tertiary)', padding: '0.75rem 1rem', borderRadius: 'var(--radius)', flex: 1, minWidth: '150px' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>Reconciler</div>
+                <div style={{
+                  fontWeight: 800,
+                  color: rescanStatus?.reconciler?.running ? 'var(--accent)' : rescanStatus?.reconciler?.enabled ? '#22c55e' : 'var(--text-muted)',
+                }}>
+                  {rescanStatus?.reconciler?.running ? 'Running' : rescanStatus?.reconciler?.enabled ? 'Enabled' : 'Disabled'}
+                </div>
               </div>
               <div style={{ background: 'var(--bg-tertiary)', padding: '0.75rem 1rem', borderRadius: 'var(--radius)', flex: 1, minWidth: '150px' }}>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>Pending Changes</div>

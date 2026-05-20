@@ -44,6 +44,10 @@ PGID=568
 
 `MEDIA_ROOT` is the path CultAnime can read inside its runtime. `JELLYFIN_MEDIA_ROOT` is the path Jellyfin sees for that same folder. After the watcher sees a change, it waits for the folder to be quiet, asks Jellyfin to rescan the affected series folder, then runs the CultAnime sync.
 
+CultAnime also runs a Jellyfin reconciliation loop by default. `LIBRARY_RECONCILE_INTERVAL_MS` controls how often the app compares Jellyfin's current series/episode list with SQLite, and `LIBRARY_RECONCILE_ON_READ_INTERVAL_MS` controls the minimum time between reconciliation checks triggered by anime list requests. The default read interval is `0`, so a page refresh can remove stale anime panels after Jellyfin has dropped a deleted series; raise this value if you prefer faster list responses over immediate cleanup.
+
+On the server, `LOCAL_MEDIA_PRUNE_ENABLED=true` lets CultAnime remove episode rows when the underlying media files are gone from `MEDIA_ROOT`. If every episode appears missing at once, CultAnime skips local pruning unless `LOCAL_MEDIA_PRUNE_ALLOW_MASS_DELETE=true`, which protects against an accidentally unmounted media folder.
+
 `PUID` and `PGID` control the Linux user that runs the app inside Docker. On TrueNAS SCALE, `568:568` is commonly used for app datasets. Set these to the owner of the folder mounted at `/app/data` so SQLite can create `cultanime.db`.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

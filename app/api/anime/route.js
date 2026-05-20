@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '../../../lib/db';
+import { reconcileForRead } from '../../../lib/library-reconciler';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
   try {
+    await reconcileForRead();
+
     const db = getDb();
     const { searchParams } = new URL(request.url);
     const genre = searchParams.get('genre');
