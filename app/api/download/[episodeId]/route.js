@@ -50,9 +50,64 @@ function copyHeader(sourceHeaders, targetHeaders, name) {
   if (value) targetHeaders.set(name, value);
 }
 
+function bytesFromValue(value) {
+  const bytes = Number(value);
+  return Number.isFinite(bytes) && bytes > 0 ? bytes : null;
+}
+
+function sizeFromContentRange(value) {
+  const match = String(value || '').match(/\/(\d+)$/);
+  return match ? bytesFromValue(match[1]) : null;
+}
+
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function sizeFromJellyfinHeaders(directUrl) {
+  try {
+    const head = await fetchWithTimeout(directUrl, {
+      method: 'HEAD',
+      cache: 'no-store',
+    });
+    const headSize = bytesFromValue(head.headers.get('content-length'));
+    if (head.ok && headSize) return headSize;
+  } catch {
+    // Some Jellyfin setups do not respond to HEAD for direct stream URLs.
+  }
+
+  try {
+    const range = await fetchWithTimeout(directUrl, {
+      headers: { Range: 'bytes=0-0' },
+      cache: 'no-store',
+    });
+    return sizeFromContentRange(range.headers.get('content-range'))
+      || bytesFromValue(range.headers.get('content-length'));
+  } catch {
+    return null;
+  }
+}
+
+async function resolveDownloadSize(mediaSource, directUrl) {
+  return bytesFromValue(mediaSource?.Size)
+    || bytesFromValue(mediaSource?.size)
+    || await sizeFromJellyfinHeaders(directUrl);
+}
+
 export async function GET(request, { params }) {
   try {
     const { episodeId } = await params;
+    const { searchParams } = new URL(request.url);
     const playback = await resolveEpisodePlayback(episodeId);
 
     if (!playback) {
@@ -61,6 +116,20 @@ export async function GET(request, { params }) {
 
     const { episode, jellyfinItemId, mediaSourceId, mediaSource } = playback;
     const directUrl = getDirectStreamUrl(jellyfinItemId, { mediaSourceId });
+    const filename = buildDownloadFilename(episode, mediaSource);
+
+    if (searchParams.get('metadata') === '1') {
+      return NextResponse.json({
+        episodeId: episode.id,
+        filename,
+        sizeBytes: await resolveDownloadSize(mediaSource, directUrl),
+      }, {
+        headers: {
+          'Cache-Control': 'private, no-store',
+        },
+      });
+    }
+
     const requestHeaders = {};
     const range = request.headers.get('range');
 
@@ -93,7 +162,7 @@ export async function GET(request, { params }) {
       headers.set('content-type', 'application/octet-stream');
     }
 
-    headers.set('content-disposition', contentDisposition(buildDownloadFilename(episode, mediaSource)));
+    headers.set('content-disposition', contentDisposition(filename));
     headers.set('cache-control', 'private, no-store');
 
     return new NextResponse(upstream.body, {

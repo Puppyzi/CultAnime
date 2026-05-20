@@ -583,6 +583,48 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
 .external-player-status {
   color: var(--text-secondary); font-size: 0.72rem; font-weight: 500;
 }
+.download-confirm {
+  position: relative;
+}
+.download-confirm-button {
+  white-space: nowrap;
+}
+.download-confirm.open .download-confirm-button {
+  border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim);
+}
+.download-confirm-popover {
+  position: absolute; right: 0; bottom: calc(100% + 0.45rem); z-index: 40;
+  width: min(290px, 82vw); display: grid; gap: 0.45rem;
+  padding: 0.75rem;
+  background: #18181b; border: 1px solid rgba(255,255,255,0.12);
+  border-radius: var(--radius-sm); box-shadow: var(--shadow-lg);
+  transform-origin: bottom right;
+  animation: mediaDropdownIn 150ms ease-out both;
+}
+.download-confirm-label {
+  color: var(--text-secondary); font-size: 0.68rem; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0;
+}
+.download-confirm-size {
+  color: #ffffff; font-size: 1.1rem; font-weight: 800; line-height: 1.15;
+}
+.download-confirm-size.muted {
+  color: var(--text-secondary); font-size: 0.82rem; font-weight: 700;
+}
+.download-confirm-filename {
+  color: var(--text-secondary); font-size: 0.72rem; line-height: 1.35;
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+.download-confirm-error {
+  color: var(--red); font-size: 0.74rem; font-weight: 700; line-height: 1.35;
+}
+.download-confirm-actions {
+  display: flex; justify-content: flex-end; margin-top: 0.1rem;
+}
+.download-confirm-actions .btn.disabled {
+  opacity: 0.55; pointer-events: none; transform: none; box-shadow: none;
+}
 .player-more-menu { position: relative; }
 .player-more-button {
   display: inline-flex; align-items: center; gap: 0.35rem;
@@ -889,6 +931,7 @@ textarea.form-input { resize: vertical; min-height: 70px; }
     justify-content: space-between; align-items: center !important;
   }
   .external-player-actions { justify-content: flex-start; }
+  .download-confirm-popover { left: 0; right: auto; transform-origin: bottom left; }
   .player-nav-buttons { margin-left: auto; }
   .player-sidebar { max-height: 350px; border-left: none; border-top: 1px solid var(--border); }
   .anime-detail-content { grid-template-columns: 160px 1fr; }

@@ -233,6 +233,23 @@ function destroyHlsInstance(hls) {
   }
 }
 
+function formatBytes(bytes) {
+  const size = Number(bytes);
+  if (!Number.isFinite(size) || size <= 0) return 'Size unavailable';
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = size;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  const decimals = unitIndex === 0 || value >= 10 ? 0 : 1;
+  return `${value.toFixed(decimals)} ${units[unitIndex]}`;
+}
+
 function MediaDropdown({ label, value, options, disabled, onChange }) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -383,6 +400,155 @@ function PlayerMoreMenu({ episodeId, onCopyMpvCommand }) {
           >
             Copy MPV command
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlayerDownloadConfirm({ episodeId }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [metadata, setMetadata] = useState(null);
+  const [error, setError] = useState('');
+  const confirmRef = useRef(null);
+  const requestRunRef = useRef(0);
+  const downloadHref = `/api/download/${episodeId}`;
+  const hasConfirmedSize = Number.isFinite(Number(metadata?.sizeBytes)) && Number(metadata.sizeBytes) > 0;
+
+  useEffect(() => {
+    requestRunRef.current += 1;
+    setOpen(false);
+    setLoading(false);
+    setMetadata(null);
+    setError('');
+  }, [episodeId]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event) {
+      if (!confirmRef.current?.contains(event.target)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  async function loadDownloadMetadata() {
+    const runId = requestRunRef.current + 1;
+    requestRunRef.current = runId;
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch(`${downloadHref}?metadata=1`, { cache: 'no-store' });
+      const data = await res.json();
+
+      if (requestRunRef.current !== runId) return;
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Could not check download size');
+      }
+
+      if (String(data.episodeId) !== String(episodeId)) {
+        throw new Error('The download size did not match this episode');
+      }
+
+      if (!Number.isFinite(Number(data.sizeBytes)) || Number(data.sizeBytes) <= 0) {
+        throw new Error('Could not confirm this episode file size');
+      }
+
+      setMetadata(data);
+    } catch (loadError) {
+      if (requestRunRef.current !== runId) return;
+
+      console.error('Download metadata failed:', loadError);
+      setMetadata(null);
+      setError(loadError.message || 'Could not check download size');
+    } finally {
+      if (requestRunRef.current === runId) {
+        setLoading(false);
+      }
+    }
+  }
+
+  function handleToggle() {
+    const nextOpen = !open;
+    setOpen(nextOpen);
+
+    if (nextOpen && (!metadata || String(metadata.episodeId) !== String(episodeId) || error)) {
+      loadDownloadMetadata();
+    }
+  }
+
+  return (
+    <div className={`download-confirm${open ? ' open' : ''}`} ref={confirmRef}>
+      <button
+        type="button"
+        className="btn btn-secondary btn-sm download-confirm-button"
+        onClick={handleToggle}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+      >
+        Download
+      </button>
+      {open && (
+        <div className="download-confirm-popover" role="dialog" aria-label="Confirm episode download">
+          <div className="download-confirm-label">Download size</div>
+          {loading ? (
+            <div className="download-confirm-size muted">Checking...</div>
+          ) : error ? (
+            <div className="download-confirm-error">{error}</div>
+          ) : (
+            <>
+              <div className="download-confirm-size">{formatBytes(metadata?.sizeBytes)}</div>
+              {metadata?.filename && (
+                <div className="download-confirm-filename" title={metadata.filename}>
+                  {metadata.filename}
+                </div>
+              )}
+            </>
+          )}
+          <div className="download-confirm-actions">
+            {error ? (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={loadDownloadMetadata}
+              >
+                Retry
+              </button>
+            ) : (
+              <a
+                href={downloadHref}
+                className={`btn btn-primary btn-sm${hasConfirmedSize ? '' : ' disabled'}`}
+                aria-disabled={!hasConfirmedSize}
+                onClick={(event) => {
+                  if (!hasConfirmedSize) {
+                    event.preventDefault();
+                    return;
+                  }
+                  setOpen(false);
+                }}
+              >
+                Download now
+              </a>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -964,13 +1130,7 @@ export default function WatchPage() {
               )}
             </div>
             <div className="external-player-actions">
-              <a
-                href={`/api/download/${currentEp.id}`}
-                className="btn btn-secondary btn-sm"
-                title="Be sure to select the correct subtitle before downloading"
-              >
-                Download episode
-              </a>
+              <PlayerDownloadConfirm episodeId={currentEp.id} />
               <PlayerMoreMenu episodeId={currentEp.id} onCopyMpvCommand={handleCopyMpvCommand} />
               {mpvStatus && <span className="external-player-status">{mpvStatus}</span>}
             </div>
