@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 
 const SUBTITLE_PREF_KEY = 'cultanime.subtitleTrack';
+const AUDIO_PREF_KEY = 'cultanime.audioTrack';
 
 function episodeThumbnailUrl(ep, width = 320, height = 180) {
   return `/api/thumbnail/${ep.id}?width=${width}&height=${height}`;
@@ -36,6 +37,23 @@ function getSubtitleId(subtitle) {
 
 function getSubtitleById(subtitles, subtitleId) {
   return subtitles.find(sub => getSubtitleId(sub) === subtitleId);
+}
+
+function getAudioTrackId(audioTrack) {
+  return String(audioTrack.index);
+}
+
+function chooseInitialAudioTrack(audioTracks) {
+  if (!audioTracks.length) return 'default';
+
+  try {
+    const saved = window.localStorage.getItem(AUDIO_PREF_KEY);
+    if (saved && audioTracks.some(track => getAudioTrackId(track) === saved)) return saved;
+  } catch {
+    // Preference persistence is optional.
+  }
+
+  return 'default';
 }
 
 function requiresBurnedInSubtitle(subtitle) {
@@ -160,6 +178,8 @@ export default function WatchPage() {
   const [loading, setLoading] = useState(true);
   const [streamError, setStreamError] = useState(null);
   const [streamLoading, setStreamLoading] = useState(false);
+  const [audioTracks, setAudioTracks] = useState([]);
+  const [selectedAudioTrack, setSelectedAudioTrack] = useState('default');
   const [subtitles, setSubtitles] = useState([]);
   const [selectedSubtitle, setSelectedSubtitle] = useState('off');
   const [subtitleMode, setSubtitleMode] = useState('soft');
@@ -169,9 +189,10 @@ export default function WatchPage() {
 
   const animeIdNumber = Number.parseInt(animeId, 10);
   const episodeNum = parseInt(ep);
+  const audioTrackKey = selectedAudioTrack === 'default' ? 'default-audio' : selectedAudioTrack;
   const burnedSubtitleKey = subtitleMode === 'burned' ? selectedSubtitle : 'soft';
   const playerDomKey = currentEp
-    ? `${currentEp.id}-${subtitleMode}-${burnedSubtitleKey}`
+    ? `${currentEp.id}-${audioTrackKey}-${subtitleMode}-${burnedSubtitleKey}`
     : 'empty-player';
 
   const teardownPlayer = useCallback((ownedVideo) => {
@@ -196,6 +217,8 @@ export default function WatchPage() {
     setLoading(true);
     setCurrentEp(null);
     setStreamError(null);
+    setAudioTracks([]);
+    setSubtitles([]);
 
     async function load() {
       try {
@@ -279,6 +302,9 @@ export default function WatchPage() {
     async function initStream() {
       try {
         const streamParams = new URLSearchParams();
+        if (selectedAudioTrack !== 'default') {
+          streamParams.set('audioStreamIndex', selectedAudioTrack);
+        }
         if (selectedSubtitle === 'off' && subtitles.length > 0) {
           streamParams.set('subtitleMode', 'off');
         } else if (subtitleMode === 'burned' && selectedSubtitle !== 'off') {
@@ -307,7 +333,15 @@ export default function WatchPage() {
         const hlsUrl = data.streamSessionId
           ? `${data.hlsUrl}${data.hlsUrl.includes('?') ? '&' : '?'}cultanimeSession=${encodeURIComponent(data.streamSessionId)}`
           : data.hlsUrl;
+        const audioTrackOptions = Array.isArray(data.audioTracks) ? data.audioTracks : [];
         const subtitleTracks = Array.isArray(data.subtitles) ? data.subtitles : [];
+        const selectedAudioExists = selectedAudioTrack !== 'default'
+          && audioTrackOptions.some(track => getAudioTrackId(track) === selectedAudioTrack);
+        const initialAudioTrack = selectedAudioTrack === 'default'
+          ? chooseInitialAudioTrack(audioTrackOptions)
+          : selectedAudioExists
+            ? selectedAudioTrack
+            : 'default';
         const isBurnedInStream = data.subtitleMode === 'burned';
         const isSubtitleOffStream = data.subtitleMode === 'off';
         const selectedSubtitleExists = subtitleTracks.some(sub => getSubtitleId(sub) === selectedSubtitle);
@@ -319,6 +353,12 @@ export default function WatchPage() {
             ? selectedSubtitle
             : chooseInitialSubtitle(subtitleTracks);
         const initialSubtitleTrack = getSubtitleById(subtitleTracks, initialSubtitle);
+
+        setAudioTracks(audioTrackOptions);
+        if (initialAudioTrack !== selectedAudioTrack) {
+          setSelectedAudioTrack(initialAudioTrack);
+          return;
+        }
 
         setSubtitles(subtitleTracks);
         setSelectedSubtitle(initialSubtitle);
@@ -438,7 +478,7 @@ export default function WatchPage() {
       abortController.abort();
       teardownPlayer(ownedVideo);
     };
-  }, [currentEp, subtitleMode, burnedSubtitleKey, teardownPlayer]);
+  }, [currentEp, selectedAudioTrack, subtitleMode, burnedSubtitleKey, teardownPlayer]);
 
   useEffect(() => {
     const softSubtitle = subtitleMode === 'burned' ? 'off' : selectedSubtitle;
@@ -467,6 +507,23 @@ export default function WatchPage() {
 
     try {
       window.localStorage.setItem(SUBTITLE_PREF_KEY, nextSubtitle);
+    } catch {
+      // Preference persistence is optional.
+    }
+  }
+
+  function handleAudioTrackChange(event) {
+    if (streamLoading) return;
+
+    const nextAudioTrack = event.target.value;
+    setSelectedAudioTrack(nextAudioTrack);
+
+    try {
+      if (nextAudioTrack === 'default') {
+        window.localStorage.removeItem(AUDIO_PREF_KEY);
+      } else {
+        window.localStorage.setItem(AUDIO_PREF_KEY, nextAudioTrack);
+      }
     } catch {
       // Preference persistence is optional.
     }
@@ -612,19 +669,34 @@ export default function WatchPage() {
           <h1>{currentEp.title || `Episode ${currentEp.episode_number}`}</h1>
           <div className="player-meta-row">
             <span className="episode-label">Episode {currentEp.episode_number}{anime.episodes_total ? ` of ${anime.episodes_total}` : ''}</span>
-            {subtitles.length > 0 && (
-              <div className="subtitle-controls">
-                <label className="subtitle-picker">
-                  <span>Subtitles</span>
-                  <select value={selectedSubtitle} onChange={handleSubtitleChange} disabled={streamLoading}>
-                    <option value="off">Off</option>
-                    {subtitles.map(sub => (
-                      <option key={`${sub.index}-${sub.title}`} value={getSubtitleId(sub)}>
-                        {sub.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+            {(audioTracks.length > 1 || subtitles.length > 0) && (
+              <div className="media-controls">
+                {audioTracks.length > 1 && (
+                  <label className="media-picker">
+                    <span>Audio</span>
+                    <select value={selectedAudioTrack} onChange={handleAudioTrackChange} disabled={streamLoading}>
+                      <option value="default">Default</option>
+                      {audioTracks.map(track => (
+                        <option key={`${track.index}-${track.title}`} value={getAudioTrackId(track)}>
+                          {track.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {subtitles.length > 0 && (
+                  <label className="media-picker">
+                    <span>Subtitles</span>
+                    <select value={selectedSubtitle} onChange={handleSubtitleChange} disabled={streamLoading}>
+                      <option value="off">Off</option>
+                      {subtitles.map(sub => (
+                        <option key={`${sub.index}-${sub.title}`} value={getSubtitleId(sub)}>
+                          {sub.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
               </div>
             )}
           </div>

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { getStreamUrl, getDirectStreamUrl } from '../../../../lib/jellyfin';
-import { chooseSubtitle, requiresBurnedInSubtitle, resolveEpisodePlayback } from '../../../../lib/playback';
+import { chooseAudioTrack, chooseSubtitle, requiresBurnedInSubtitle, resolveEpisodePlayback } from '../../../../lib/playback';
 
 /**
  * GET /api/stream/[episodeId]
@@ -24,15 +24,17 @@ export async function GET(request, { params }) {
       ? subtitleModeParam
       : 'auto';
     const requestedSubtitleIndex = searchParams.get('subtitleStreamIndex');
+    const requestedAudioIndex = searchParams.get('audioStreamIndex');
     const playback = await resolveEpisodePlayback(episodeId);
 
     if (!playback) {
       return NextResponse.json({ error: 'Episode not found' }, { status: 404 });
     }
 
-    const { episode, jellyfinItemId, mediaSourceId, subtitles } = playback;
+    const { episode, jellyfinItemId, mediaSourceId, audioTracks, subtitles } = playback;
     const streamSessionId = crypto.randomUUID();
     const streamIdentity = `cultanime-${episode.id}-${streamSessionId}`;
+    const audioTrack = chooseAudioTrack(audioTracks, requestedAudioIndex);
     const autoSubtitle = requestedSubtitleMode === 'auto'
       ? chooseSubtitle(subtitles, requestedSubtitleIndex)
       : null;
@@ -46,6 +48,7 @@ export async function GET(request, { params }) {
       mediaSourceId,
       deviceId: streamIdentity,
       playSessionId: streamSessionId,
+      audioStreamIndex: audioTrack?.index,
       subtitleMethod: 'Encode',
       subtitleStreamIndex: burnedInSubtitle.index,
       alwaysBurnInSubtitleWhenTranscoding: true,
@@ -53,14 +56,20 @@ export async function GET(request, { params }) {
       mediaSourceId,
       deviceId: streamIdentity,
       playSessionId: streamSessionId,
+      audioStreamIndex: audioTrack?.index,
     });
-    const directUrl = burnedInSubtitle ? null : getDirectStreamUrl(jellyfinItemId, { mediaSourceId });
+    const directUrl = burnedInSubtitle ? null : getDirectStreamUrl(jellyfinItemId, {
+      mediaSourceId,
+      audioStreamIndex: audioTrack?.index,
+    });
 
     return NextResponse.json({
       episodeId: episode.id,
       jellyfinItemId,
       hlsUrl,
       directUrl,
+      audioTracks,
+      audioStreamIndex: audioTrack?.index ?? null,
       subtitles,
       streamSessionId,
       subtitleMode: burnedInSubtitle ? 'burned' : requestedSubtitleMode === 'off' ? 'off' : 'soft',
