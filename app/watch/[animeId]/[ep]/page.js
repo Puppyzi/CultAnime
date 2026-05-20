@@ -43,6 +43,33 @@ function getAudioTrackId(audioTrack) {
   return String(audioTrack.index);
 }
 
+function mediaText(track) {
+  return `${track?.language || ''} ${track?.title || ''}`.toLowerCase();
+}
+
+function isJapaneseAudioTrack(track) {
+  const text = mediaText(track);
+  return text.includes('jpn') || text.includes('japanese') || text.includes('ja ');
+}
+
+function isEnglishSubtitle(subtitle) {
+  const text = mediaText(subtitle);
+  return text.includes('eng') || text.includes('english') || text.includes(' en ');
+}
+
+function isSignsOnlySubtitle(subtitle) {
+  const text = mediaText(subtitle);
+  return subtitle?.isForced
+    || text.includes('forced')
+    || text.includes('signs')
+    || text.includes('songs');
+}
+
+function isFullSubtitle(subtitle) {
+  const text = mediaText(subtitle);
+  return text.includes('full') || text.includes('dialog') || text.includes('dialogue');
+}
+
 function chooseInitialAudioTrack(audioTracks) {
   if (!audioTracks.length) return 'default';
 
@@ -53,7 +80,8 @@ function chooseInitialAudioTrack(audioTracks) {
     // Preference persistence is optional.
   }
 
-  return 'default';
+  const japaneseTrack = audioTracks.find(isJapaneseAudioTrack);
+  return japaneseTrack ? getAudioTrackId(japaneseTrack) : 'default';
 }
 
 function requiresBurnedInSubtitle(subtitle) {
@@ -64,15 +92,23 @@ function requiresBurnedInSubtitle(subtitle) {
 function chooseInitialSubtitle(subtitles) {
   if (!subtitles.length) return 'off';
 
+  const preferredSubtitle = subtitles.find(sub => isEnglishSubtitle(sub) && isFullSubtitle(sub) && !isSignsOnlySubtitle(sub))
+    || subtitles.find(sub => isEnglishSubtitle(sub) && !isSignsOnlySubtitle(sub))
+    || subtitles.find(sub => isFullSubtitle(sub) && !isSignsOnlySubtitle(sub))
+    || subtitles.find(sub => isEnglishSubtitle(sub));
+
   try {
     const saved = window.localStorage.getItem(SUBTITLE_PREF_KEY);
-    if (saved && subtitles.some(sub => getSubtitleId(sub) === saved)) return saved;
+    const savedSubtitle = subtitles.find(sub => getSubtitleId(sub) === saved);
+    if (savedSubtitle && (!isSignsOnlySubtitle(savedSubtitle) || !preferredSubtitle)) {
+      return saved;
+    }
   } catch {
     // localStorage can be unavailable in private browsing modes.
   }
 
-  const defaultSubtitle = subtitles.find(sub => sub.isDefault)
-    || subtitles.find(sub => (sub.language || '').toLowerCase().startsWith('en'))
+  const defaultSubtitle = preferredSubtitle
+    || subtitles.find(sub => sub.isDefault)
     || subtitles[0];
 
   return getSubtitleId(defaultSubtitle);
