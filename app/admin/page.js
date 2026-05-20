@@ -89,6 +89,19 @@ export default function AdminPage() {
     setTimeout(() => setToast(null), 3000);
   }
 
+  function syncSummary(data) {
+    const created = data.results?.filter(r => r.status === 'created').length || 0;
+    const updated = data.results?.filter(r => r.status === 'updated').length || 0;
+    const removed = data.removed_count || 0;
+    const episodesRemoved = data.results?.reduce((total, r) => total + (r.episodes_removed || 0), 0) || 0;
+    const parts = [`${created} new`, `${updated} updated`];
+
+    if (removed > 0) parts.push(`${removed} removed`);
+    if (episodesRemoved > 0) parts.push(`${episodesRemoved} episodes removed`);
+
+    return parts.join(', ');
+  }
+
   async function searchAnilist() {
     if (!anilistQuery.trim()) return;
     const res = await fetch(`/api/admin/anilist?q=${encodeURIComponent(anilistQuery)}`);
@@ -290,9 +303,7 @@ export default function AdminPage() {
       setSyncResults(data);
       loadAnimeList();
       loadSyncPreview();
-      const created = data.results?.filter(r => r.status === 'created').length || 0;
-      const updated = data.results?.filter(r => r.status === 'updated').length || 0;
-      showToast(`Synced! ${created} new, ${updated} updated.`);
+      showToast(`Synced! ${syncSummary(data)}.`);
     } catch (err) {
       showToast('Sync failed: ' + err.message, 'error');
     }
@@ -312,9 +323,7 @@ export default function AdminPage() {
       setSyncResults(data);
       loadAnimeList();
       loadSyncPreview();
-      const created = data.results?.filter(r => r.status === 'created').length || 0;
-      const updated = data.results?.filter(r => r.status === 'updated').length || 0;
-      showToast(`Synced all! ${created} new, ${updated} updated.`);
+      showToast(`Synced all! ${syncSummary(data)}.`);
     } catch (err) {
       showToast('Sync failed: ' + err.message, 'error');
     }
@@ -492,16 +501,20 @@ export default function AdminPage() {
                     <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{syncPreview.existing_count}</div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Already Synced</div>
                   </div>
+                  <div style={{ background: 'var(--bg-tertiary)', padding: '0.75rem 1rem', borderRadius: 'var(--radius)', flex: 1, minWidth: '120px' }}>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 700, color: syncPreview.removed_count > 0 ? '#f87171' : 'var(--text-secondary)' }}>{syncPreview.removed_count || 0}</div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Missing in Jellyfin</div>
+                  </div>
                 </div>
 
-                {syncPreview.new_count > 0 && (
+                {(syncPreview.new_count > 0 || syncPreview.removed_count > 0) && (
                   <button className="btn btn-primary" onClick={syncAll} disabled={syncing} style={{ marginBottom: '1rem' }}>
-                    {syncing ? '⏳ Syncing...' : `🚀 Sync All ${syncPreview.new_count} New Anime`}
+                    {syncing ? 'Syncing...' : `Sync Library Changes (${syncPreview.new_count || 0} new, ${syncPreview.removed_count || 0} removed)`}
                   </button>
                 )}
 
                 {syncPreview.existing_count > 0 && (
-                  <button className="btn btn-secondary" onClick={syncAll} disabled={syncing} style={{ marginBottom: '1rem', marginLeft: syncPreview.new_count > 0 ? '0.5rem' : 0 }}>
+                  <button className="btn btn-secondary" onClick={syncAll} disabled={syncing} style={{ marginBottom: '1rem', marginLeft: (syncPreview.new_count > 0 || syncPreview.removed_count > 0) ? '0.5rem' : 0 }}>
                     {syncing ? 'Refreshing...' : 'Refresh Episode Metadata'}
                   </button>
                 )}
@@ -525,6 +538,18 @@ export default function AdminPage() {
                     </div>
                   ))}
                 </div>
+
+                {syncPreview.stale_series?.length > 0 && (
+                  <div style={{ marginTop: '1rem', padding: '1rem', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 'var(--radius)' }}>
+                    <h4 style={{ marginBottom: '0.5rem', color: '#fca5a5' }}>Missing from Jellyfin</h4>
+                    {syncPreview.stale_series.map(s => (
+                      <div key={s.jellyfin_id} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', padding: '0.45rem 0', borderBottom: '1px solid rgba(248,113,113,0.15)', fontSize: '0.85rem' }}>
+                        <span>{s.title}</span>
+                        <span style={{ color: '#fca5a5' }}>Will be removed on sync</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </>
             )}
 
@@ -536,9 +561,15 @@ export default function AdminPage() {
                     <span>{r.name}</span>
                     <span style={{ color: r.status === 'error' ? '#ef4444' : r.status === 'created' ? '#22c55e' : 'var(--text-secondary)' }}>
                       {r.status === 'created' && `Created - ${r.episodes_added} episodes`}
-                      {r.status === 'updated' && `Updated - ${r.episodes_added} new, ${r.episodes_updated || 0} refreshed`}
+                      {r.status === 'updated' && `Updated - ${r.episodes_added} new, ${r.episodes_updated || 0} refreshed${r.episodes_removed ? `, ${r.episodes_removed} removed` : ''}`}
                       {r.status === 'error' && `❌ ${r.error}`}
                     </span>
+                  </div>
+                ))}
+                {syncResults.removed_series?.map(series => (
+                  <div key={series.jellyfin_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid var(--border)', fontSize: '0.9rem' }}>
+                    <span>{series.title}</span>
+                    <span style={{ color: '#f87171' }}>Removed - missing from Jellyfin</span>
                   </div>
                 ))}
               </div>
