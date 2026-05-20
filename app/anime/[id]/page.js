@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
@@ -35,6 +35,175 @@ function episodeMetaText(ep) {
 
 function episodeThumbnailUrl(ep, width = 320, height = 180) {
   return `/api/thumbnail/${ep.id}?width=${width}&height=${height}`;
+}
+
+function formatBytes(bytes) {
+  const size = Number(bytes);
+  if (!Number.isFinite(size) || size <= 0) return 'Size unavailable';
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = size;
+  let unitIndex = 0;
+
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+
+  const decimals = unitIndex === 0 || value >= 10 ? 0 : 1;
+  return `${value.toFixed(decimals)} ${units[unitIndex]}`;
+}
+
+function SeriesDownloadConfirm({ animeId }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [metadata, setMetadata] = useState(null);
+  const [error, setError] = useState('');
+  const confirmRef = useRef(null);
+  const requestRunRef = useRef(0);
+  const downloadHref = `/api/download-series/${animeId}`;
+  const hasConfirmedSize = Number.isFinite(Number(metadata?.totalSizeBytes)) && Number(metadata.totalSizeBytes) > 0;
+
+  useEffect(() => {
+    requestRunRef.current += 1;
+    setOpen(false);
+    setLoading(false);
+    setMetadata(null);
+    setError('');
+  }, [animeId]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event) {
+      if (!confirmRef.current?.contains(event.target)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  async function loadSeriesMetadata() {
+    const runId = requestRunRef.current + 1;
+    requestRunRef.current = runId;
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch(`${downloadHref}?metadata=1`, { cache: 'no-store' });
+      const data = await res.json();
+
+      if (requestRunRef.current !== runId) return;
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Could not check download size');
+      }
+
+      if (String(data.animeId) !== String(animeId)) {
+        throw new Error('The download size did not match this anime');
+      }
+
+      if (!Number.isFinite(Number(data.totalSizeBytes)) || Number(data.totalSizeBytes) <= 0) {
+        throw new Error('Could not confirm this series file size');
+      }
+
+      setMetadata(data);
+    } catch (loadError) {
+      if (requestRunRef.current !== runId) return;
+
+      console.error('Series download metadata failed:', loadError);
+      setMetadata(null);
+      setError(loadError.message || 'Could not check download size');
+    } finally {
+      if (requestRunRef.current === runId) {
+        setLoading(false);
+      }
+    }
+  }
+
+  function handleToggle() {
+    const nextOpen = !open;
+    setOpen(nextOpen);
+
+    if (nextOpen && (!metadata || String(metadata.animeId) !== String(animeId) || error)) {
+      loadSeriesMetadata();
+    }
+  }
+
+  return (
+    <div className={`series-download-confirm${open ? ' open' : ''}`} ref={confirmRef}>
+      <button
+        type="button"
+        className="btn btn-secondary series-download-button"
+        onClick={handleToggle}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+      >
+        Download All
+      </button>
+      {open && (
+        <div className="series-download-popover" role="dialog" aria-label="Confirm series download">
+          <div className="download-confirm-label">Total size</div>
+          {loading ? (
+            <div className="download-confirm-size muted">Checking...</div>
+          ) : error ? (
+            <div className="download-confirm-error">{error}</div>
+          ) : (
+            <>
+              <div className="download-confirm-size">{formatBytes(metadata?.totalSizeBytes)}</div>
+              <div className="series-download-meta">
+                {metadata?.episodeCount || 0} episodes ZIP
+              </div>
+              {metadata?.filename && (
+                <div className="download-confirm-filename" title={metadata.filename}>
+                  {metadata.filename}
+                </div>
+              )}
+            </>
+          )}
+          <div className="download-confirm-actions">
+            {error ? (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={loadSeriesMetadata}
+              >
+                Retry
+              </button>
+            ) : (
+              <a
+                href={downloadHref}
+                className={`btn btn-primary btn-sm${hasConfirmedSize ? '' : ' disabled'}`}
+                aria-disabled={!hasConfirmedSize}
+                onClick={(event) => {
+                  if (!hasConfirmedSize) {
+                    event.preventDefault();
+                    return;
+                  }
+                  setOpen(false);
+                }}
+              >
+                Download ZIP
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function AnimeDetailPage() {
@@ -93,7 +262,7 @@ export default function AnimeDetailPage() {
       <div className="anime-detail-content">
         <div>
           <img className="anime-detail-cover" src={anime.cover_image} alt={anime.title} />
-          <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
+          <div className="anime-detail-actions">
             {anime.episodes?.length > 0 && (
               <Link href={`/watch/${anime.id}/1`} className="btn btn-primary" style={{ justifyContent: 'center' }}>
                 ▶ Start Watching
@@ -102,6 +271,9 @@ export default function AnimeDetailPage() {
             <button onClick={toggleWatchlist} className="btn btn-secondary" style={{ justifyContent: 'center' }}>
               {inWatchlist ? '✓ In Watchlist' : '+ Add to Watchlist'}
             </button>
+            {anime.episodes?.length > 0 && (
+              <SeriesDownloadConfirm animeId={anime.id} />
+            )}
           </div>
         </div>
 
