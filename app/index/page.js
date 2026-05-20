@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { getDb } from '../../lib/db';
-import { reconcileForRead } from '../../lib/library-reconciler';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,8 +49,6 @@ function parseJsonList(value) {
 }
 
 async function loadAnime() {
-  await reconcileForRead();
-
   const db = getDb();
   const rows = db.prepare('SELECT * FROM anime ORDER BY title COLLATE NOCASE ASC').all();
   const countEpisode = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE anime_id = ?');

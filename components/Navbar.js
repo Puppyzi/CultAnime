@@ -38,7 +38,7 @@ export default function Navbar() {
   const navLinks = [
     { href: '/', label: 'Home' },
     { href: '/browse', label: 'Browse' },
-    { href: '/index', label: 'Index' },
+    { href: '/index', label: 'Index', reload: true },
     { href: '/watchlist', label: 'Watchlist' },
     { href: '/admin', label: 'Admin' },
   ];
@@ -50,10 +50,16 @@ export default function Navbar() {
       </Link>
       <div className="navbar-links">
         {navLinks.map(l => (
-          <Link key={l.href} href={l.href}
-            className={pathname === l.href ? 'active' : ''}>
-            {l.label}
-          </Link>
+          l.reload ? (
+            <a key={l.href} href={l.href} className={pathname === l.href ? 'active' : ''}>
+              {l.label}
+            </a>
+          ) : (
+            <Link key={l.href} href={l.href}
+              className={pathname === l.href ? 'active' : ''}>
+              {l.label}
+            </Link>
+          )
         ))}
       </div>
       <span>1.2</span>
