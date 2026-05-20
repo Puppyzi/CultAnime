@@ -13,7 +13,7 @@ export default function RootLayout({ children }) {
         <Navbar />
         <main>{children}</main>
         <footer className="footer">
-          <p>CultAnime &copy; {new Date().getFullYear()} — Self-hosted anime streaming</p>
+          <p>cultAnime &copy; {new Date().getFullYear()} — Self-hosted anime streaming</p>
         </footer>
       </body>
     </html>

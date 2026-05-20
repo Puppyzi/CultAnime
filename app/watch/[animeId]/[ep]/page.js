@@ -318,6 +318,77 @@ function MediaDropdown({ label, value, options, disabled, onChange }) {
   );
 }
 
+function PlayerMoreMenu({ episodeId, onCopyMpvCommand }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event) {
+      if (!menuRef.current?.contains(event.target)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  function handleCopyClick() {
+    onCopyMpvCommand();
+    setOpen(false);
+  }
+
+  return (
+    <div className={`player-more-menu${open ? ' open' : ''}`} ref={menuRef}>
+      <button
+        type="button"
+        className="btn btn-secondary btn-sm player-more-button"
+        onClick={() => setOpen(current => !current)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        More
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M5.5 7.5 10 12l4.5-4.5" />
+        </svg>
+      </button>
+      {open && (
+        <div className="player-more-dropdown" role="menu">
+          <a
+            href={`/api/mpv/${episodeId}?format=playlist`}
+            className="player-more-item"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+          >
+            MPV playlist
+          </a>
+          <button
+            type="button"
+            className="player-more-item"
+            role="menuitem"
+            onClick={handleCopyClick}
+          >
+            Copy MPV command
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function WatchPage() {
   const { animeId, ep } = useParams();
   const router = useRouter();
@@ -894,27 +965,13 @@ export default function WatchPage() {
             </div>
             <div className="external-player-actions">
               <a
-                href={`/api/mpv/${currentEp.id}?format=playlist`}
-                className="btn btn-secondary btn-sm"
-                title="Download a playlist that opens this episode through Jellyfin's direct stream"
-              >
-                MPV playlist
-              </a>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={handleCopyMpvCommand}
-                title="Copy an mpv command with hardware decoding enabled"
-              >
-                Copy MPV command
-              </button>
-              <a
                 href={`/api/download/${currentEp.id}`}
                 className="btn btn-secondary btn-sm"
                 title="Be sure to select the correct subtitle before downloading"
               >
                 Download episode
               </a>
+              <PlayerMoreMenu episodeId={currentEp.id} onCopyMpvCommand={handleCopyMpvCommand} />
               {mpvStatus && <span className="external-player-status">{mpvStatus}</span>}
             </div>
           </div>
