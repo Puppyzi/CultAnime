@@ -233,6 +233,91 @@ function destroyHlsInstance(hls) {
   }
 }
 
+function MediaDropdown({ label, value, options, disabled, onChange }) {
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  const selectedOption = options.find(option => option.value === value) || options[0];
+
+  useEffect(() => {
+    if (!open) return;
+
+    function handlePointerDown(event) {
+      if (!dropdownRef.current?.contains(event.target)) {
+        setOpen(false);
+      }
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  function handleToggle() {
+    if (disabled) return;
+    setOpen(current => !current);
+  }
+
+  function handleOptionSelect(nextValue) {
+    onChange(nextValue);
+    setOpen(false);
+  }
+
+  function handleButtonKeyDown(event) {
+    if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (!disabled) setOpen(true);
+    }
+  }
+
+  return (
+    <div className="media-picker">
+      <span>{label}</span>
+      <div className={`media-dropdown${open ? ' open' : ''}`} ref={dropdownRef}>
+        <button
+          type="button"
+          className="media-dropdown-button"
+          onClick={handleToggle}
+          onKeyDown={handleButtonKeyDown}
+          disabled={disabled}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+        >
+          <span>{selectedOption?.label || 'Default'}</span>
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M5.5 7.5 10 12l4.5-4.5" />
+          </svg>
+        </button>
+        {open && (
+          <div className="media-dropdown-menu" role="listbox">
+            {options.map(option => (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={option.value === value}
+                className={`media-dropdown-option${option.value === value ? ' selected' : ''}`}
+                onClick={() => handleOptionSelect(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function WatchPage() {
   const { animeId, ep } = useParams();
   const router = useRouter();
@@ -553,10 +638,9 @@ export default function WatchPage() {
     applySubtitleSelection(videoRef.current, softSubtitle);
   }, [selectedSubtitle, subtitleMode]);
 
-  function handleSubtitleChange(event) {
+  function handleSubtitleChange(nextSubtitle) {
     if (streamLoading) return;
 
-    const nextSubtitle = event.target.value;
     const nextSubtitleTrack = getSubtitleById(subtitles, nextSubtitle);
     const nextMode = nextSubtitle === 'off'
       ? 'soft'
@@ -576,10 +660,9 @@ export default function WatchPage() {
     writeMediaPreference(SUBTITLE_PREF_KEY, animeId, nextSubtitle);
   }
 
-  function handleAudioTrackChange(event) {
+  function handleAudioTrackChange(nextAudioTrack) {
     if (streamLoading) return;
 
-    const nextAudioTrack = event.target.value;
     setSelectedAudioTrack(nextAudioTrack);
 
     if (nextAudioTrack === 'default') {
@@ -736,30 +819,34 @@ export default function WatchPage() {
             {(audioTracks.length > 1 || subtitles.length > 0) && (
               <div className="media-controls">
                 {audioTracks.length > 1 && (
-                  <label className="media-picker">
-                    <span>Audio</span>
-                    <select value={selectedAudioTrack} onChange={handleAudioTrackChange} disabled={streamLoading}>
-                      <option value="default">Default</option>
-                      {audioTracks.map(track => (
-                        <option key={`${track.index}-${track.title}`} value={getAudioTrackId(track)}>
-                          {track.title}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <MediaDropdown
+                    label="Audio"
+                    value={selectedAudioTrack}
+                    disabled={streamLoading}
+                    onChange={handleAudioTrackChange}
+                    options={[
+                      { value: 'default', label: 'Default' },
+                      ...audioTracks.map(track => ({
+                        value: getAudioTrackId(track),
+                        label: track.title,
+                      })),
+                    ]}
+                  />
                 )}
                 {subtitles.length > 0 && (
-                  <label className="media-picker">
-                    <span>Subtitles</span>
-                    <select value={selectedSubtitle} onChange={handleSubtitleChange} disabled={streamLoading}>
-                      <option value="off">Off</option>
-                      {subtitles.map(sub => (
-                        <option key={`${sub.index}-${sub.title}`} value={getSubtitleId(sub)}>
-                          {sub.title}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <MediaDropdown
+                    label="Subtitles"
+                    value={selectedSubtitle}
+                    disabled={streamLoading}
+                    onChange={handleSubtitleChange}
+                    options={[
+                      { value: 'off', label: 'Off' },
+                      ...subtitles.map(sub => ({
+                        value: getSubtitleId(sub),
+                        label: sub.title,
+                      })),
+                    ]}
+                  />
                 )}
               </div>
             )}

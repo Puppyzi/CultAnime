@@ -476,6 +476,80 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
   display: inline-flex; align-items: center; gap: 0.5rem;
   color: var(--text-secondary); font-size: 0.75rem; font-weight: 600;
 }
+.media-dropdown {
+  position: relative; min-width: 240px; max-width: min(340px, 70vw);
+}
+.media-dropdown-button {
+  width: 100%; min-height: 2rem;
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 0.7rem;
+  padding: 0.35rem 0.55rem 0.35rem 0.75rem;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-tertiary); color: var(--text-primary);
+  font-size: 0.78rem; font-weight: 600; text-align: left;
+  outline: none; transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease, background 160ms ease;
+}
+.media-dropdown-button span {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.media-dropdown-button svg {
+  width: 1rem; height: 1rem; flex: 0 0 1rem;
+  stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round;
+  color: var(--text-secondary); transition: transform 180ms ease, color 180ms ease;
+}
+.media-dropdown-button:hover,
+.media-dropdown-button:focus-visible,
+.media-dropdown.open .media-dropdown-button {
+  border-color: var(--accent); background: #1c1c1f;
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+.media-dropdown-button:hover { transform: translateY(-1px); }
+.media-dropdown.open .media-dropdown-button svg { transform: rotate(180deg); color: var(--accent); }
+.media-dropdown-button:disabled {
+  cursor: wait; opacity: 0.65; transform: none;
+}
+.media-dropdown-menu {
+  position: absolute; left: 0; right: 0; bottom: calc(100% + 0.45rem); z-index: 30;
+  display: grid; gap: 0.15rem; padding: 0.25rem;
+  background: #18181b; border: 1px solid rgba(255,255,255,0.12);
+  border-radius: var(--radius-sm); box-shadow: var(--shadow-lg);
+  transform-origin: bottom center;
+  animation: mediaDropdownIn 150ms ease-out both;
+}
+.media-dropdown-option {
+  position: relative; width: 100%;
+  display: flex; align-items: center;
+  padding: 0.42rem 0.65rem 0.42rem 0.75rem;
+  border: 0; border-radius: 4px; background: transparent;
+  color: var(--text-primary); font-size: 0.78rem; font-weight: 600; text-align: left;
+  overflow: hidden; outline: none;
+  transition: color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+.media-dropdown-option::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(90deg, rgba(186,90,255,0.28), rgba(26,167,232,0.18));
+  opacity: 0; transition: opacity 140ms ease;
+}
+.media-dropdown-option:hover,
+.media-dropdown-option:focus-visible {
+  color: #ffffff; transform: translateX(2px);
+}
+.media-dropdown-option:hover::before,
+.media-dropdown-option:focus-visible::before {
+  opacity: 1;
+}
+.media-dropdown-option.selected {
+  color: #ffffff; background: rgba(186,90,255,0.26);
+}
+.media-dropdown-option.selected::before {
+  opacity: 0.55;
+}
+.media-dropdown-option > * {
+  position: relative;
+}
+@keyframes mediaDropdownIn {
+  from { opacity: 0; transform: translateY(0.35rem) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 .media-picker select,
 .subtitle-picker select {
   min-width: 180px; max-width: min(340px, 70vw);
@@ -522,11 +596,48 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
   background: var(--bg-primary); z-index: 5;
 }
 .player-episode-item {
+  position: relative; isolation: isolate; overflow: hidden;
   align-items: flex-start; gap: 0.55rem; padding: 0.55rem 0.65rem;
+  border: 1px solid transparent;
+  transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+.player-episode-item::before {
+  content: ''; position: absolute; inset: 0; z-index: -1;
+  background: linear-gradient(90deg, rgba(186,90,255,0.18), rgba(26,167,232,0.08));
+  opacity: 0; transition: opacity 160ms ease;
+}
+.player-episode-item > * {
+  position: relative;
+}
+.player-episode-item:hover,
+.player-episode-item:focus-visible {
+  background: #1b1b1f; border-color: rgba(186,90,255,0.28);
+  box-shadow: inset 3px 0 0 rgba(26,167,232,0.72), 0 10px 24px rgba(0,0,0,0.22);
+  transform: translateX(-2px);
+}
+.player-episode-item:hover::before,
+.player-episode-item:focus-visible::before {
+  opacity: 1;
+}
+.player-episode-item.active {
+  border-color: rgba(186,90,255,0.45);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.player-episode-item.active:hover,
+.player-episode-item.active:focus-visible {
+  border-color: rgba(186,90,255,0.7);
+  box-shadow: inset 3px 0 0 var(--accent), 0 10px 24px rgba(0,0,0,0.24);
 }
 .episode-sidebar-thumbnail {
   width: 76px; aspect-ratio: 16/9; flex: 0 0 76px;
   object-fit: cover; border-radius: var(--radius-sm); background: var(--bg-tertiary);
+  transition: filter 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+.player-episode-item:hover .episode-sidebar-thumbnail,
+.player-episode-item:focus-visible .episode-sidebar-thumbnail {
+  filter: brightness(1.12) saturate(1.08);
+  transform: scale(1.035);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.08);
 }
 .player-episode-copy {
   flex-direction: column; align-items: flex-start; gap: 0.15rem; flex-wrap: nowrap;
@@ -534,12 +645,36 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
 .player-episode-copy .episode-title {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden; line-height: 1.35;
+  transition: color 160ms ease;
+}
+.player-episode-item:hover .episode-title,
+.player-episode-item:focus-visible .episode-title {
+  color: #ffffff;
 }
 .player-episode-item .episode-number {
   min-width: 20px; padding-top: 0.15rem;
+  transition: color 160ms ease, transform 160ms ease;
+}
+.player-episode-item:hover .episode-number,
+.player-episode-item:focus-visible .episode-number {
+  color: var(--accent); transform: translateX(1px);
 }
 .player-episode-item .episode-meta {
   font-size: 0.66rem;
+  transition: color 160ms ease;
+}
+.player-episode-item:hover .episode-meta,
+.player-episode-item:focus-visible .episode-meta {
+  color: var(--text-secondary);
+}
+.player-episode-item.active > span:last-child {
+  color: var(--accent);
+  transition: transform 160ms ease, text-shadow 160ms ease;
+}
+.player-episode-item.active:hover > span:last-child,
+.player-episode-item.active:focus-visible > span:last-child {
+  transform: translateX(2px);
+  text-shadow: 0 0 12px rgba(186,90,255,0.75);
 }
 .sidebar-now-playing {
   font-size: 0.58rem; padding: 0.1rem 0.3rem;
