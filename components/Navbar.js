@@ -38,6 +38,7 @@ export default function Navbar() {
   const navLinks = [
     { href: '/', label: 'Home' },
     { href: '/browse', label: 'Browse' },
+    { href: '/index', label: 'Index' },
     { href: '/watchlist', label: 'Watchlist' },
     { href: '/admin', label: 'Admin' },
   ];
@@ -55,7 +56,7 @@ export default function Navbar() {
           </Link>
         ))}
       </div>
-      <span>1.1</span>
+      <span>1.2</span>
       <div className="navbar-search" ref={searchRef}>
         <span className="search-icon">🔍</span>
         <input
