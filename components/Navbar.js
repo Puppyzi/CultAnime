@@ -39,9 +39,16 @@ export default function Navbar() {
     { href: '/', label: 'Home' },
     { href: '/browse', label: 'Browse' },
     { href: '/anime-index', label: 'Index', reload: true },
+    { href: '/request', label: 'Request', reload: true },
     { href: '/watchlist', label: 'Watchlist' },
     { href: '/admin', label: 'Admin' },
   ];
+  const isActive = (link) => {
+    if (link.href === '/anime-index') {
+      return pathname === '/anime-index' || pathname === '/index';
+    }
+    return pathname === link.href;
+  };
 
   return (
     <nav className="navbar">
@@ -51,18 +58,18 @@ export default function Navbar() {
       <div className="navbar-links">
         {navLinks.map(l => (
           l.reload ? (
-            <a key={l.href} href={l.href} className={pathname === l.href || pathname === '/index' ? 'active' : ''}>
+            <a key={l.href} href={l.href} className={isActive(l) ? 'active' : ''}>
               {l.label}
             </a>
           ) : (
             <Link key={l.href} href={l.href}
-              className={pathname === l.href ? 'active' : ''}>
+              className={isActive(l) ? 'active' : ''}>
               {l.label}
             </Link>
           )
         ))}
       </div>
-      <span>1.5</span>
+      <span>1.6</span>
       <div className="navbar-search" ref={searchRef}>
         <span className="search-icon">🔍</span>
         <input

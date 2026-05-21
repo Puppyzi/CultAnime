@@ -52,6 +52,12 @@ The admin page and `/api/admin/*` routes are protected by `ADMIN_PASSWORD`. Afte
 
 `PUID` and `PGID` control the Linux user that runs the app inside Docker. On TrueNAS SCALE, `568:568` is commonly used for app datasets. Set these to the owner of the folder mounted at `/app/data` so SQLite can create `cultanime.db`.
 
+The `Request` tab talks to Seerr/Jellyseerr through CultAnime's backend when `SEERR_URL` and `SEERR_API_KEY` are set, for example `SEERR_URL=http://YOUR_SEERR_SERVER:5055`. Keep Seerr connected to Sonarr/Jellyfin so requests flow through Seerr first, then Sonarr downloads, Jellyfin scans, and CultAnime syncs the new anime into the library. The Seerr API key is server-only and is never exposed to the browser.
+
+Request search and submit are anime-gated. By default, CultAnime only allows TV results that are animation and have Japanese origin/language metadata from Seerr/TMDB. You can extend the accepted metadata with `SEERR_ANIME_ORIGIN_COUNTRIES=JP,CN,KR` or `SEERR_ANIME_LANGUAGES=ja,zh,ko` if your library should include donghua or Korean animation.
+
+Request season rows show estimated download size using `REQUEST_ESTIMATED_EPISODE_SIZE_MB` multiplied by Seerr's episode count for that season. The default is `400` MB per episode. This is an estimate because the exact size is only known after Sonarr chooses a release.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More
