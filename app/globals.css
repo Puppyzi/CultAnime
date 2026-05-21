@@ -931,6 +931,28 @@ a.index-letter-link:focus-visible {
   color: var(--accent); font-size: 1rem; font-weight: 800;
   padding-right: 0.15rem;
 }
+.index-loading-list {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.5rem;
+}
+.index-skeleton-item {
+  display: grid; grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center; gap: 0.75rem; min-height: 76px;
+  padding: 0.55rem; border-radius: var(--radius-sm);
+  background: var(--bg-card);
+}
+.index-skeleton-cover {
+  width: 52px; height: 72px;
+}
+.index-skeleton-copy {
+  display: grid; gap: 0.45rem;
+}
+.index-skeleton-copy .skeleton {
+  width: 85%; height: 14px;
+}
+.index-skeleton-copy .skeleton.short {
+  width: 45%; height: 10px;
+}
 
 /* ---- ADMIN ---- */
 .admin-page { padding: 1.5rem 2.5rem; max-width: 1100px; margin: 0 auto; }
@@ -1135,5 +1157,6 @@ textarea.form-input { resize: vertical; min-height: 70px; }
   .index-letters { gap: 0.3rem; }
   .index-letter-link { width: 1.85rem; height: 1.85rem; }
   .index-all-link { height: 1.85rem; }
-  .index-list { grid-template-columns: 1fr; }
+  .index-list,
+  .index-loading-list { grid-template-columns: 1fr; }
 }

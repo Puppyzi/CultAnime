@@ -1,7 +1,7 @@
+'use client';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { getDb } from '../../lib/db';
-
-export const dynamic = 'force-dynamic';
+import { useSearchParams } from 'next/navigation';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 const INDEX_GROUPS = ['#', ...LETTERS];
@@ -30,46 +30,67 @@ function metaFor(anime) {
   return parts.join(' / ');
 }
 
-function normalizeSelectedLetter(searchParams) {
-  const rawLetter = Array.isArray(searchParams?.letter)
-    ? searchParams.letter[0]
-    : searchParams?.letter;
-  if (!rawLetter) return null;
+function normalizeSelectedLetter(value) {
+  if (!value) return null;
 
-  const letter = String(rawLetter).trim().toUpperCase();
+  const letter = String(value).trim().toUpperCase();
   return INDEX_GROUPS.includes(letter) ? letter : null;
 }
 
-function parseJsonList(value) {
-  try {
-    return JSON.parse(value || '[]');
-  } catch {
-    return [];
-  }
-}
+function IndexContent() {
+  const searchParams = useSearchParams();
+  const selectedLetter = normalizeSelectedLetter(searchParams.get('letter'));
+  const [anime, setAnime] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-async function loadAnime() {
-  const db = getDb();
-  const rows = db.prepare('SELECT * FROM anime ORDER BY title COLLATE NOCASE ASC').all();
-  const countEpisode = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE anime_id = ?');
+  useEffect(() => {
+    let ignore = false;
 
-  return rows.map(anime => ({
-    ...anime,
-    genres: parseJsonList(anime.genres),
-    studios: parseJsonList(anime.studios),
-    episode_count: countEpisode.get(anime.id)?.count || 0,
-  }));
-}
+    async function loadAnime() {
+      setLoading(true);
+      setError('');
 
-export default async function IndexPage({ searchParams }) {
-  const params = await searchParams;
-  const selectedLetter = normalizeSelectedLetter(params);
-  const anime = await loadAnime();
-  const grouped = Object.fromEntries(INDEX_GROUPS.map(letter => [letter, []]));
+      try {
+        const res = await fetch('/api/index', { cache: 'no-store' });
+        const data = await res.json();
 
-  anime.forEach(item => {
-    grouped[groupFor(titleFor(item))].push(item);
-  });
+        if (!res.ok) {
+          throw new Error(data.error || 'Could not load anime index');
+        }
+
+        if (!ignore) {
+          setAnime(data.anime || []);
+        }
+      } catch (loadError) {
+        console.error(loadError);
+        if (!ignore) {
+          setAnime([]);
+          setError(loadError.message || 'Could not load anime index');
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadAnime();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const grouped = useMemo(() => {
+    const groups = Object.fromEntries(INDEX_GROUPS.map(letter => [letter, []]));
+
+    anime.forEach(item => {
+      groups[groupFor(titleFor(item))].push(item);
+    });
+
+    return groups;
+  }, [anime]);
 
   const populatedGroups = INDEX_GROUPS.filter(letter => grouped[letter].length > 0);
   const visibleGroups = selectedLetter
@@ -84,7 +105,7 @@ export default async function IndexPage({ searchParams }) {
           <p className="index-kicker">Library</p>
           <h1>Anime Index</h1>
         </div>
-        <span className="index-count">{visibleCount} series</span>
+        {!loading && !error && <span className="index-count">{visibleCount} series</span>}
       </header>
 
       <nav className="index-letters" aria-label="Anime index letters">
@@ -106,7 +127,25 @@ export default async function IndexPage({ searchParams }) {
         ))}
       </nav>
 
-      {anime.length === 0 ? (
+      {loading ? (
+        <div className="index-loading-list" aria-label="Loading anime index">
+          {Array(6).fill(0).map((_, index) => (
+            <div key={index} className="index-skeleton-item">
+              <div className="skeleton index-skeleton-cover" />
+              <div className="index-skeleton-copy">
+                <div className="skeleton" />
+                <div className="skeleton short" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : error ? (
+        <div className="empty-state">
+          <div className="icon">A-Z</div>
+          <h3>Index could not load</h3>
+          <p>{error}</p>
+        </div>
+      ) : anime.length === 0 ? (
         <div className="empty-state">
           <div className="icon">A-Z</div>
           <h3>No anime yet</h3>
@@ -148,5 +187,13 @@ export default async function IndexPage({ searchParams }) {
         </div>
       )}
     </div>
+  );
+}
+
+export default function IndexPage() {
+  return (
+    <Suspense fallback={<div className="index-page">Loading...</div>}>
+      <IndexContent />
+    </Suspense>
   );
 }
