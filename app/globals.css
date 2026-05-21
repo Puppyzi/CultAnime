@@ -1200,7 +1200,7 @@ textarea.form-input { resize: vertical; min-height: 70px; }
   display: grid; gap: 0.35rem;
 }
 .request-season-row {
-  display: grid; grid-template-columns: auto 34px minmax(0, 1fr) auto;
+  display: grid; grid-template-columns: auto 34px minmax(0, 1fr);
   gap: 0.55rem; align-items: center;
   min-height: 46px; padding: 0.45rem 0.55rem;
   border-radius: var(--radius-sm); background: rgba(255,255,255,0.03);
@@ -1233,14 +1233,6 @@ textarea.form-input { resize: vertical; min-height: 70px; }
 .request-season-copy small {
   color: var(--text-secondary); font-size: 0.68rem; font-weight: 600;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.request-season-size {
-  justify-self: end;
-  color: var(--yellow); background: rgba(250,204,21,0.1);
-  border: 1px solid rgba(250,204,21,0.18);
-  border-radius: 4px; padding: 0.18rem 0.45rem;
-  font-size: 0.68rem; font-weight: 800;
-  white-space: nowrap;
 }
 .request-season-submit {
   margin-top: 0.65rem;
@@ -1359,6 +1351,4 @@ textarea.form-input { resize: vertical; min-height: 70px; }
   .request-loading-grid { grid-template-columns: 1fr; }
   .request-result-card { grid-template-columns: 76px minmax(0, 1fr); }
   .request-result-poster { width: 76px; }
-  .request-season-row { grid-template-columns: auto 34px minmax(0, 1fr); }
-  .request-season-size { grid-column: 3; justify-self: start; }
 }

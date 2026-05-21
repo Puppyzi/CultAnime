@@ -56,8 +56,6 @@ The `Request` tab talks to Seerr/Jellyseerr through CultAnime's backend when `SE
 
 Request search and submit are anime-gated. By default, CultAnime only allows TV results that are animation and have Japanese origin/language metadata from Seerr/TMDB. You can extend the accepted metadata with `SEERR_ANIME_ORIGIN_COUNTRIES=JP,CN,KR` or `SEERR_ANIME_LANGUAGES=ja,zh,ko` if your library should include donghua or Korean animation.
 
-Request season rows show estimated download size using `REQUEST_ESTIMATED_EPISODE_SIZE_MB` multiplied by Seerr's episode count for that season. The default is `400` MB per episode. This is an estimate because the exact size is only known after Sonarr chooses a release.
-
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More

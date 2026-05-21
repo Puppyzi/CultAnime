@@ -31,23 +31,6 @@ function seasonMeta(season) {
   ].filter(Boolean).join(' / ');
 }
 
-function formatBytes(bytes) {
-  const size = Number(bytes);
-  if (!Number.isFinite(size) || size <= 0) return null;
-
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let value = size;
-  let unitIndex = 0;
-
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-
-  const decimals = unitIndex === 0 || value >= 10 ? 0 : 1;
-  return `${value.toFixed(decimals)} ${units[unitIndex]}`;
-}
-
 function requestButtonLabel(seasons, selectedSeasons) {
   const selected = seasons.filter(season => selectedSeasons.includes(season.seasonNumber));
   const requestableNormal = seasons.filter(season => season.seasonNumber > 0 && canRequestSeason(season));
@@ -381,11 +364,6 @@ export default function RequestPage() {
                                   <strong>{season.name}</strong>
                                   <small>{seasonMeta(season) || 'Season details unavailable'}</small>
                                 </span>
-                                {season.estimatedSizeBytes && (
-                                  <span className="request-season-size">
-                                    Est. {formatBytes(season.estimatedSizeBytes)}
-                                  </span>
-                                )}
                               </label>
                             );
                           })}
