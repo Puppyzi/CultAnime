@@ -1,6 +1,12 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import {
+  AIRING_SORT_OPTIONS,
+  normalizeAiringSort,
+  sortAnime,
+  titleForAnime,
+} from '../../lib/airingSort';
 
 const SEASON_NAMES = {
   WINTER: 'Winter',
@@ -8,9 +14,8 @@ const SEASON_NAMES = {
   SUMMER: 'Summer',
   FALL: 'Fall',
 };
-
 function titleFor(anime) {
-  return anime.title || anime.title_romaji || anime.title_english || 'Untitled';
+  return titleForAnime(anime);
 }
 
 function requestTitleFor(anime) {
@@ -49,13 +54,33 @@ function releaseStatusText(anime) {
   return airDate ? `EP ${next.episode} airs ${airDate}` : `EP ${next.episode} next`;
 }
 
-export default function AiringClient({ initialGroups, initialSeason, initialYear, initialError }) {
+function sortHrefFor(sortKey) {
+  return sortKey === 'popularity' ? '/airing' : `/airing?sort=${encodeURIComponent(sortKey)}`;
+}
+
+export default function AiringClient({ initialGroups, initialSeason, initialYear, initialSort, initialError }) {
   const [groups, setGroups] = useState(initialGroups || []);
   const [season, setSeason] = useState(initialSeason || '');
   const [year, setYear] = useState(initialYear || '');
   const [query, setQuery] = useState('');
   const [loadingMoreKey, setLoadingMoreKey] = useState(null);
   const [error, setError] = useState(initialError || '');
+  const sortRef = useRef(null);
+  const sortToggleRef = useRef(null);
+  const sortKey = normalizeAiringSort(initialSort);
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key !== 'Escape' || !sortToggleRef.current?.checked) return;
+      sortToggleRef.current.checked = false;
+      if (sortRef.current?.contains(document.activeElement)) document.activeElement.blur();
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   async function loadMore(group) {
     if (!group?.pageInfo?.hasNextPage || loadingMoreKey) return;
@@ -108,7 +133,13 @@ export default function AiringClient({ initialGroups, initialSeason, initialYear
     }));
   }, [groups, query]);
 
-  const shownCount = filteredGroups.reduce((total, group) => total + group.anime.length, 0);
+  const sortedGroups = useMemo(() => filteredGroups.map(group => ({
+    ...group,
+    anime: sortAnime(group.anime, sortKey),
+  })), [filteredGroups, sortKey]);
+
+  const shownCount = sortedGroups.reduce((total, group) => total + group.anime.length, 0);
+  const activeSort = AIRING_SORT_OPTIONS.find(option => option.key === sortKey) || AIRING_SORT_OPTIONS[0];
 
   const heading = season && year
     ? `${SEASON_NAMES[season] || season} ${year} Airing`
@@ -121,8 +152,49 @@ export default function AiringClient({ initialGroups, initialSeason, initialYear
           <p className="airing-kicker">Airing</p>
           <h1>{heading}</h1>
         </div>
-        <div className="airing-count">
-          {`${shownCount} shown`}
+        <div className="airing-header-actions">
+          <div className="airing-count">
+            {`${shownCount} shown`}
+          </div>
+          <div className="airing-sort" ref={sortRef}>
+            <input
+              ref={sortToggleRef}
+              className="airing-sort-toggle"
+              id="airing-sort-toggle"
+              type="checkbox"
+              aria-label={`Sort airing anime. Current sort: ${activeSort.label}`}
+            />
+            <label
+              className="airing-sort-button"
+              htmlFor="airing-sort-toggle"
+              role="button"
+              aria-haspopup="menu"
+              aria-controls="airing-sort-menu"
+            >
+              <span className="airing-sort-icon" aria-hidden="true" />
+              <span>{activeSort.label}</span>
+              <span className="airing-sort-caret" aria-hidden="true" />
+            </label>
+            <label
+              className="airing-sort-backdrop"
+              htmlFor="airing-sort-toggle"
+              aria-hidden="true"
+            />
+            <div id="airing-sort-menu" className="airing-sort-menu" role="menu">
+              {AIRING_SORT_OPTIONS.map(option => (
+                <Link
+                  key={option.key}
+                  className={option.key === sortKey ? 'active' : ''}
+                  href={sortHrefFor(option.key)}
+                  aria-current={option.key === sortKey ? 'true' : undefined}
+                  role="menuitemradio"
+                  aria-checked={option.key === sortKey}
+                >
+                  {option.label}
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -148,7 +220,7 @@ export default function AiringClient({ initialGroups, initialSeason, initialYear
         </div>
       ) : (
         <div className="airing-sections">
-          {filteredGroups.map(group => (
+          {sortedGroups.map(group => (
             <section key={group.key} className="airing-section">
               <div className="airing-section-header">
                 <h2>{group.label}</h2>
