@@ -18,8 +18,8 @@ export default function Navbar() {
         setShowDropdown(false);
       }
     }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    document.addEventListener('pointerdown', handleClick);
+    return () => document.removeEventListener('pointerdown', handleClick);
   }, []);
 
   useEffect(() => {
@@ -69,7 +69,7 @@ export default function Navbar() {
           )
         ))}
       </div>
-      <span>1.6</span>
+      <span className="navbar-version" aria-label="Version 1.6">1.6</span>
       <div className="navbar-search" ref={searchRef}>
         <span className="search-icon">🔍</span>
         <input
