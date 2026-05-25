@@ -37,6 +37,7 @@ export default function Navbar() {
 
   const navLinks = [
     { href: '/', label: 'Home' },
+    { href: '/airing', label: 'Airing' },
     { href: '/browse', label: 'Browse' },
     { href: '/anime-index', label: 'Index', reload: true },
     { href: '/request', label: 'Request', reload: true },

@@ -1,0 +1,233 @@
+'use client';
+import { useMemo, useState } from 'react';
+import Link from 'next/link';
+
+const SEASON_NAMES = {
+  WINTER: 'Winter',
+  SPRING: 'Spring',
+  SUMMER: 'Summer',
+  FALL: 'Fall',
+};
+
+function titleFor(anime) {
+  return anime.title || anime.title_romaji || anime.title_english || 'Untitled';
+}
+
+function requestTitleFor(anime) {
+  return anime.request_title || anime.title_romaji || titleFor(anime);
+}
+
+function metaFor(anime) {
+  return [
+    anime.format?.replace(/_/g, ' '),
+    anime.episodes_total ? `${anime.episodes_total} EP` : null,
+    anime.rating ? `${anime.rating}%` : null,
+  ].filter(Boolean).join(' / ');
+}
+
+function formatAiringDate(airingAt) {
+  if (!airingAt) return null;
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(Number(airingAt) * 1000));
+}
+
+function releaseStatusText(anime) {
+  const next = anime.next_airing_episode;
+  if (!next?.episode) {
+    if (anime.format === 'MOVIE') return anime.status === 'NOT_YET_RELEASED' ? 'Upcoming' : 'Movie';
+    if (anime.status === 'NOT_YET_RELEASED') return 'Upcoming';
+    if (anime.status === 'FINISHED') return 'Released';
+    return 'Airing now';
+  }
+
+  const airDate = formatAiringDate(next.airingAt);
+  return airDate ? `EP ${next.episode} airs ${airDate}` : `EP ${next.episode} next`;
+}
+
+export default function AiringClient({ initialGroups, initialSeason, initialYear, initialError }) {
+  const [groups, setGroups] = useState(initialGroups || []);
+  const [season, setSeason] = useState(initialSeason || '');
+  const [year, setYear] = useState(initialYear || '');
+  const [query, setQuery] = useState('');
+  const [loadingMoreKey, setLoadingMoreKey] = useState(null);
+  const [error, setError] = useState(initialError || '');
+
+  async function loadMore(group) {
+    if (!group?.pageInfo?.hasNextPage || loadingMoreKey) return;
+
+    setLoadingMoreKey(group.key);
+    setError('');
+
+    try {
+      const nextPage = Number(group.pageInfo.currentPage || 1) + 1;
+      const res = await fetch(`/api/airing?category=${encodeURIComponent(group.key)}&page=${nextPage}`, { cache: 'no-store' });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Could not load more airing anime.');
+      }
+
+      setSeason(data.season || season);
+      setYear(data.year || year);
+      setGroups(current => current.map(currentGroup => (
+        currentGroup.key === group.key
+          ? {
+            ...currentGroup,
+            pageInfo: data.category?.pageInfo || data.pageInfo || null,
+            anime: [...currentGroup.anime, ...(data.category?.anime || data.anime || [])],
+          }
+          : currentGroup
+      )));
+    } catch (loadError) {
+      console.error(loadError);
+      setError(loadError.message || 'Could not load more airing anime.');
+    } finally {
+      setLoadingMoreKey(null);
+    }
+  }
+
+  const filteredGroups = useMemo(() => {
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return groups;
+
+    return groups.map(group => ({
+      ...group,
+      anime: group.anime.filter(item => [
+        item.title,
+        item.title_romaji,
+        item.title_english,
+        item.title_native,
+        ...(item.genres || []),
+        ...(item.studios || []),
+      ].filter(Boolean).some(value => String(value).toLowerCase().includes(trimmed))),
+    }));
+  }, [groups, query]);
+
+  const shownCount = filteredGroups.reduce((total, group) => total + group.anime.length, 0);
+
+  const heading = season && year
+    ? `${SEASON_NAMES[season] || season} ${year} Airing`
+    : 'Airing Anime';
+
+  return (
+    <div className="airing-page">
+      <div className="airing-header">
+        <div>
+          <p className="airing-kicker">Airing</p>
+          <h1>{heading}</h1>
+        </div>
+        <div className="airing-count">
+          {`${shownCount} shown`}
+        </div>
+      </div>
+
+      <div className="airing-toolbar">
+        <input
+          className="airing-search"
+          type="text"
+          placeholder="Filter by title, genre, or studio..."
+          value={query}
+          onChange={event => setQuery(event.target.value)}
+        />
+      </div>
+
+      {error && (
+        <div className="request-alert error">{error}</div>
+      )}
+
+      {shownCount === 0 && !error ? (
+        <div className="empty-state">
+          <div className="icon">A-Z</div>
+          <h3>No airing anime found</h3>
+          <p>Try a different filter.</p>
+        </div>
+      ) : (
+        <div className="airing-sections">
+          {filteredGroups.map(group => (
+            <section key={group.key} className="airing-section">
+              <div className="airing-section-header">
+                <h2>{group.label}</h2>
+                <span>{group.anime.length}</span>
+              </div>
+
+              {group.anime.length === 0 ? (
+                <div className="airing-empty-section">No titles found</div>
+              ) : (
+                <>
+                  <div className="airing-grid">
+                    {group.anime.map(item => (
+                      <article key={item.anilist_id} className="airing-card">
+                        <img
+                          className="airing-card-poster"
+                          src={item.cover_image || '/placeholder.png'}
+                          alt={titleFor(item)}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                        <div className="airing-card-copy">
+                          <div className="airing-title-row">
+                            <h2>{titleFor(item)}</h2>
+                            <span>{releaseStatusText(item)}</span>
+                          </div>
+                          {item.title_romaji && item.title_romaji !== titleFor(item) && (
+                            <p className="airing-romaji">{item.title_romaji}</p>
+                          )}
+                          <div className="airing-meta">
+                            {metaFor(item) && <span>{metaFor(item)}</span>}
+                            {item.studios?.[0] && <span>{item.studios[0]}</span>}
+                          </div>
+                          {item.description && <p className="airing-description">{item.description}</p>}
+                          {item.genres?.length > 0 && (
+                            <div className="airing-genres">
+                              {item.genres.slice(0, 4).map(genre => (
+                                <span key={genre}>{genre}</span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="airing-actions">
+                            <Link
+                              className="btn btn-primary btn-sm"
+                              href={`/request?q=${encodeURIComponent(requestTitleFor(item))}`}
+                            >
+                              Request
+                            </Link>
+                            <a
+                              className="btn btn-secondary btn-sm"
+                              href={`https://anilist.co/anime/${item.anilist_id}`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              AniList
+                            </a>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+
+                  {group.pageInfo?.hasNextPage && !query.trim() && (
+                    <div className="airing-load-more">
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        disabled={Boolean(loadingMoreKey)}
+                        onClick={() => loadMore(group)}
+                      >
+                        {loadingMoreKey === group.key ? 'Loading...' : `Load More ${group.label}`}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
