@@ -30,13 +30,15 @@ Server deployment runs on the Linux server or Docker host that can access the re
 MEDIA_WATCHER_ENABLED=true
 MEDIA_ROOT=/anime
 JELLYFIN_MEDIA_ROOT=/media/anime
+ANIME_MOVIE_ROOT=/anime_movies
+JELLYFIN_ANIME_MOVIE_ROOT=/media/anime_movies
 MEDIA_RESCAN_DEBOUNCE_MS=60000
 JELLYFIN_RESCAN_SETTLE_MS=10000
 PUID=568
 PGID=568
 ```
 
-`MEDIA_ROOT` is the path CultAnime can read inside its runtime. `JELLYFIN_MEDIA_ROOT` is the path Jellyfin sees for that same folder. After the watcher sees a change, it waits for the folder to be quiet, asks Jellyfin to rescan the affected series folder, then runs the CultAnime sync.
+`MEDIA_ROOT` is the path CultAnime can read inside its runtime. `JELLYFIN_MEDIA_ROOT` is the path Jellyfin sees for that same folder. Anime movies use the same pairing through `ANIME_MOVIE_ROOT` and `JELLYFIN_ANIME_MOVIE_ROOT`; only Jellyfin movie items under `/media/anime_movies` are imported as movie panels, so the normal `/media/movies` library is ignored. After the watcher sees a change, it waits for the folder to be quiet, asks Jellyfin to rescan the affected series or movie folder, then runs the CultAnime sync.
 
 CultAnime also runs a Jellyfin reconciliation loop by default. `LIBRARY_RECONCILE_INTERVAL_MS` controls how often the app compares Jellyfin's current series/episode list with SQLite, and `LIBRARY_RECONCILE_ON_READ_INTERVAL_MS` controls the minimum time between reconciliation checks triggered by anime list requests. The default read interval is `0`, so a page refresh can remove stale anime panels after Jellyfin has dropped a deleted series; raise this value if you prefer faster list responses over immediate cleanup.
 
@@ -46,8 +48,8 @@ The admin page and `/api/admin/*` routes are protected by `ADMIN_PASSWORD`. Afte
 
 `PUID` and `PGID` control the Linux user that runs the app inside Docker. On TrueNAS SCALE, `568:568` is commonly used for app datasets. Set these to the owner of the folder mounted at `/app/data` so SQLite can create `cultanime.db`.
 
-The `Request` tab talks to Seerr/Jellyseerr through CultAnime's backend when `SEERR_URL` and `SEERR_API_KEY` are set, for example `SEERR_URL=http://YOUR_SEERR_SERVER:5055`. Keep Seerr connected to Sonarr/Jellyfin so requests flow through Seerr first, then Sonarr downloads, Jellyfin scans, and CultAnime syncs the new anime into the library. The Seerr API key is server-only and is never exposed to the browser.
+The `Request` tab talks to Seerr/Jellyseerr through CultAnime's backend when `SEERR_URL` and `SEERR_API_KEY` are set, for example `SEERR_URL=http://YOUR_SEERR_SERVER:5055`. Keep Seerr connected to Sonarr/Radarr/Jellyfin so requests flow through Seerr first, then the downloader saves series under `/media/anime` and anime movies under `/media/anime_movies`, Jellyfin scans, and CultAnime syncs the new anime into the library. The Seerr API key is server-only and is never exposed to the browser.
 
-Request search and submit are anime-gated. By default, CultAnime only allows TV results that are animation and have Japanese origin/language metadata from Seerr/TMDB. You can extend the accepted metadata with `SEERR_ANIME_ORIGIN_COUNTRIES=JP,CN,KR` or `SEERR_ANIME_LANGUAGES=ja,zh,ko` if your library should include donghua or Korean animation.
+Request search and submit are anime-gated. By default, CultAnime only allows TV/movie results that are animation and have Japanese origin/language metadata from Seerr/TMDB. You can extend the accepted metadata with `SEERR_ANIME_ORIGIN_COUNTRIES=JP,CN,KR` or `SEERR_ANIME_LANGUAGES=ja,zh,ko` if your library should include donghua or Korean animation. Movie requests are sent to Seerr with `SEERR_ANIME_MOVIE_ROOT_FOLDER=/media/anime_movies`.
 
 For production, run CultAnime on the server that can reach Jellyfin, Seerr, SQLite storage, and the anime media mount. The included Docker files and production env example are the expected deployment path.

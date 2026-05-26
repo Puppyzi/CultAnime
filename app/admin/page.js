@@ -24,6 +24,41 @@ function formatEpisodeRuntime(seconds) {
   return `${minutes}m`;
 }
 
+function syncItemTypeLabel(item) {
+  return item?.item_type === 'movie' ? 'Movie' : 'Series';
+}
+
+function syncUnit(count, itemType) {
+  const value = Number(count) || 0;
+  const unit = itemType === 'movie' ? 'movie file' : 'episode';
+  return `${value} ${unit}${value === 1 ? '' : 's'}`;
+}
+
+function syncResultText(result) {
+  if (result.status === 'created') {
+    return `Created - ${syncUnit(result.episodes_added, result.item_type)}`;
+  }
+
+  if (result.status === 'updated') {
+    const parts = [
+      `${syncUnit(result.episodes_added, result.item_type)} new`,
+      `${result.episodes_updated || 0} refreshed`,
+    ];
+
+    if (result.episodes_removed) {
+      parts.push(`${syncUnit(result.episodes_removed, result.item_type)} removed`);
+    }
+
+    return `Updated - ${parts.join(', ')}`;
+  }
+
+  if (result.status === 'error') {
+    return `Error: ${result.error}`;
+  }
+
+  return result.status;
+}
+
 function episodeToEditForm(ep) {
   return {
     id: ep.id,
@@ -489,6 +524,11 @@ export default function AdminPage() {
             <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'grid', gap: '0.25rem', marginBottom: '1rem' }}>
               <div><strong>Media root:</strong> {rescanStatus?.watcher?.root || 'Not configured'}</div>
               <div><strong>Jellyfin path:</strong> {rescanStatus?.watcher?.jellyfinRoot || 'Not configured'}</div>
+              {rescanStatus?.watcher?.roots?.filter(root => root.kind === 'movie').map(root => (
+                <div key={`${root.root}:${root.jellyfinRoot}`}>
+                  <strong>Anime movie path:</strong> {root.root} -&gt; {root.jellyfinRoot}
+                </div>
+              ))}
               <div><strong>Quiet window:</strong> {Math.round((rescanStatus?.watcher?.debounceMs || 0) / 1000)}s before rescanning</div>
             </div>
 
@@ -510,7 +550,7 @@ export default function AdminPage() {
               <div>
                 <h3 style={{ margin: 0 }}>🔄 Jellyfin Library Sync</h3>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                  Automatically import anime from your Jellyfin server with AniList metadata.
+                  Automatically import anime series and anime movies from your Jellyfin server with AniList metadata.
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -540,6 +580,9 @@ export default function AdminPage() {
                   <div style={{ background: 'var(--bg-tertiary)', padding: '0.75rem 1rem', borderRadius: 'var(--radius)', flex: 1, minWidth: '120px' }}>
                     <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{syncPreview.total}</div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>In Jellyfin</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                      {syncPreview.series_count || 0} series / {syncPreview.movie_count || 0} movies
+                    </div>
                   </div>
                   <div style={{ background: 'var(--bg-tertiary)', padding: '0.75rem 1rem', borderRadius: 'var(--radius)', flex: 1, minWidth: '120px' }}>
                     <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#22c55e' }}>{syncPreview.new_count}</div>
@@ -568,10 +611,13 @@ export default function AdminPage() {
                 )}
 
                 <div className="admin-anime-list">
-                  {syncPreview.series.map(s => (
+                  {(syncPreview.items || syncPreview.series || []).map(s => (
                     <div key={s.jellyfin_id} className="admin-anime-item">
                       <div className="info" style={{ flex: 1 }}>
                         <h4>{s.name}</h4>
+                        <span style={{ display: 'inline-block', fontSize: '0.72rem', color: 'var(--accent)', background: 'rgba(192,91,255,0.12)', borderRadius: '999px', padding: '0.15rem 0.5rem', marginBottom: '0.35rem' }}>
+                          {syncItemTypeLabel(s)}
+                        </span>
                         <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{s.path}</p>
                       </div>
                       <div className="actions">
@@ -606,11 +652,9 @@ export default function AdminPage() {
                 <h4 style={{ marginBottom: '0.5rem' }}>Sync Results</h4>
                 {syncResults.results?.map((r, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid var(--border)', fontSize: '0.9rem' }}>
-                    <span>{r.name}</span>
+                    <span>{r.name} <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>({syncItemTypeLabel(r)})</span></span>
                     <span style={{ color: r.status === 'error' ? '#ef4444' : r.status === 'created' ? '#22c55e' : 'var(--text-secondary)' }}>
-                      {r.status === 'created' && `Created - ${r.episodes_added} episodes`}
-                      {r.status === 'updated' && `Updated - ${r.episodes_added} new, ${r.episodes_updated || 0} refreshed${r.episodes_removed ? `, ${r.episodes_removed} removed` : ''}`}
-                      {r.status === 'error' && `❌ ${r.error}`}
+                      {syncResultText(r)}
                     </span>
                   </div>
                 ))}

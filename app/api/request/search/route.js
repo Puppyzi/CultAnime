@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { searchSeerrTv, SeerrApiError } from '../../../../lib/seerr';
+import { searchSeerrAnime, SeerrApiError } from '../../../../lib/seerr';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +13,7 @@ export async function GET(request) {
   }
 
   try {
-    const results = await searchSeerrTv(query, page);
+    const results = await searchSeerrAnime(query, page);
     return NextResponse.json(results);
   } catch (error) {
     const status = error instanceof SeerrApiError ? error.status : 500;

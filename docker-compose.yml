@@ -11,6 +11,8 @@ services:
       - /mnt/Fast_SSD/cultanime_data:/app/data
       # Anime media folder mounted read-only
       - /mnt/Storage_HDD/media/anime:/anime:ro
+      # Anime movie folder mounted read-only
+      - /mnt/Storage_HDD/media/anime_movies:/anime_movies:ro
     ports:
       - 3000:3000
     restart: unless-stopped

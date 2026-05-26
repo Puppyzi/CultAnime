@@ -167,6 +167,7 @@ export default function AiringClient({ initialGroups, initialSeason, initialYear
             <label
               className="airing-sort-button"
               htmlFor="airing-sort-toggle"
+              title="Sort"
               role="button"
               aria-haspopup="menu"
               aria-controls="airing-sort-menu"

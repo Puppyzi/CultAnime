@@ -18,6 +18,18 @@ function canRequest(result) {
   return !['Pending', 'Processing', 'Available'].includes(label);
 }
 
+function resultKey(result) {
+  return `${result.mediaType || 'tv'}:${result.id}`;
+}
+
+function isMovieResult(result) {
+  return result.mediaType === 'movie';
+}
+
+function mediaTypeLabel(result) {
+  return isMovieResult(result) ? 'Movie' : 'TV Series';
+}
+
 function canRequestSeason(season) {
   const label = statusLabel(season.status);
   return !['Pending', 'Processing', 'Available'].includes(label);
@@ -127,17 +139,24 @@ export default function RequestClient({ initialQuery = '' }) {
   }
 
   async function loadDetails(result) {
-    setExpandedIds(current => ({ ...current, [result.id]: !current[result.id] }));
+    if (isMovieResult(result)) return;
 
-    if (detailsById[result.id]?.loaded || detailsById[result.id]?.loading) return;
+    const key = resultKey(result);
+    setExpandedIds(current => ({ ...current, [key]: !current[key] }));
+
+    if (detailsById[key]?.loaded || detailsById[key]?.loading) return;
 
     setDetailsById(current => ({
       ...current,
-      [result.id]: { loading: true, error: '', loaded: false, seasons: [] },
+      [key]: { loading: true, error: '', loaded: false, seasons: [] },
     }));
 
     try {
-      const res = await fetch(`/api/request/details?mediaId=${encodeURIComponent(result.id)}`, { cache: 'no-store' });
+      const params = new URLSearchParams({
+        mediaId: String(result.id),
+        mediaType: result.mediaType || 'tv',
+      });
+      const res = await fetch(`/api/request/details?${params}`, { cache: 'no-store' });
       const data = await res.json();
 
       if (!res.ok) {
@@ -148,17 +167,17 @@ export default function RequestClient({ initialQuery = '' }) {
 
       setDetailsById(current => ({
         ...current,
-        [result.id]: { loading: false, error: '', loaded: true, seasons },
+        [key]: { loading: false, error: '', loaded: true, seasons },
       }));
       setSelectedSeasonsById(current => ({
         ...current,
-        [result.id]: current[result.id] || initialSeasonSelection(seasons),
+        [key]: current[key] || initialSeasonSelection(seasons),
       }));
     } catch (detailsError) {
       console.error(detailsError);
       setDetailsById(current => ({
         ...current,
-        [result.id]: { loading: false, error: detailsError.message || 'Could not load seasons.', loaded: false, seasons: [] },
+        [key]: { loading: false, error: detailsError.message || 'Could not load seasons.', loaded: false, seasons: [] },
       }));
     }
   }
@@ -193,12 +212,13 @@ export default function RequestClient({ initialQuery = '' }) {
   async function submitRequest(result, seasons = 'all') {
     if (requestingId || !canRequest(result)) return;
 
-    if (Array.isArray(seasons) && seasons.length === 0) {
+    if (!isMovieResult(result) && Array.isArray(seasons) && seasons.length === 0) {
       setError('Choose at least one season to request.');
       return;
     }
 
-    setRequestingId(result.id);
+    const key = resultKey(result);
+    setRequestingId(key);
     setError('');
     setMessage('');
 
@@ -206,7 +226,11 @@ export default function RequestClient({ initialQuery = '' }) {
       const res = await fetch('/api/request/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mediaId: result.id, seasons }),
+        body: JSON.stringify({
+          mediaId: result.id,
+          mediaType: result.mediaType || 'tv',
+          seasons: isMovieResult(result) ? undefined : seasons,
+        }),
       });
       const data = await res.json();
 
@@ -214,8 +238,8 @@ export default function RequestClient({ initialQuery = '' }) {
         throw new Error(data.error || 'Request failed.');
       }
 
-      setRequestedIds(current => ({ ...current, [result.id]: true }));
-      setMessage(`${result.title} was sent to Seerr.`);
+      setRequestedIds(current => ({ ...current, [key]: true }));
+      setMessage(`${result.title} was sent to Seerr${isMovieResult(result) ? ' as an anime movie' : ''}.`);
     } catch (requestError) {
       console.error(requestError);
       setError(requestError.message || 'Request failed.');
@@ -283,16 +307,18 @@ export default function RequestClient({ initialQuery = '' }) {
       ) : (
         <div className="request-results-grid">
           {results.map(result => {
+            const key = resultKey(result);
+            const movie = isMovieResult(result);
             const label = statusLabel(result.status);
-            const alreadySent = requestedIds[result.id];
-            const baseDisabled = requestingId === result.id || alreadySent || !canRequest(result);
-            const expanded = Boolean(expandedIds[result.id]);
-            const details = detailsById[result.id];
-            const selectedSeasons = selectedSeasonsById[result.id] || [];
+            const alreadySent = requestedIds[key];
+            const baseDisabled = requestingId === key || alreadySent || !canRequest(result);
+            const expanded = Boolean(expandedIds[key]);
+            const details = detailsById[key];
+            const selectedSeasons = selectedSeasonsById[key] || [];
             const selectedDisabled = baseDisabled || selectedSeasons.length === 0;
 
             return (
-              <article key={result.id} className="request-result-card">
+              <article key={key} className="request-result-card">
                 <img
                   className="request-result-poster"
                   src={result.poster || '/placeholder.png'}
@@ -304,6 +330,7 @@ export default function RequestClient({ initialQuery = '' }) {
                     {result.year && <span>{result.year}</span>}
                   </div>
                   <div className="request-result-meta">
+                    <span>{mediaTypeLabel(result)}</span>
                     {label && <span>{label}</span>}
                     {result.voteAverage && <span>{Math.round(result.voteAverage * 10)}%</span>}
                   </div>
@@ -311,13 +338,19 @@ export default function RequestClient({ initialQuery = '' }) {
                   <button
                     className="btn btn-secondary btn-sm request-result-button"
                     type="button"
-                    disabled={requestingId === result.id}
-                    onClick={() => loadDetails(result)}
+                    disabled={movie ? baseDisabled : requestingId === key}
+                    onClick={() => (movie ? submitRequest(result) : loadDetails(result))}
                   >
-                    {expanded ? 'Hide Seasons' : 'Choose Seasons'}
+                    {movie
+                      ? requestingId === key
+                        ? 'Requesting...'
+                        : alreadySent
+                          ? 'Requested'
+                          : 'Request Movie'
+                      : expanded ? 'Hide Seasons' : 'Choose Seasons'}
                   </button>
                 </div>
-                {expanded && (
+                {!movie && expanded && (
                   <div className="request-season-panel">
                     {details?.loading ? (
                       <div className="request-season-loading">
@@ -332,21 +365,21 @@ export default function RequestClient({ initialQuery = '' }) {
                           <button
                             type="button"
                             className="genre-filter-btn"
-                            onClick={() => selectRequestableSeasons(result.id, details.seasons, false)}
+                            onClick={() => selectRequestableSeasons(key, details.seasons, false)}
                           >
                             Numbered Seasons
                           </button>
                           <button
                             type="button"
                             className="genre-filter-btn"
-                            onClick={() => selectRequestableSeasons(result.id, details.seasons, true)}
+                            onClick={() => selectRequestableSeasons(key, details.seasons, true)}
                           >
                             Include Specials
                           </button>
                           <button
                             type="button"
                             className="genre-filter-btn"
-                            onClick={() => setSelectedSeasonsById(current => ({ ...current, [result.id]: [] }))}
+                            onClick={() => setSelectedSeasonsById(current => ({ ...current, [key]: [] }))}
                           >
                             Clear
                           </button>
@@ -362,7 +395,7 @@ export default function RequestClient({ initialQuery = '' }) {
                                   type="checkbox"
                                   checked={checked}
                                   disabled={seasonDisabled}
-                                  onChange={() => toggleSeason(result.id, season.seasonNumber)}
+                                  onChange={() => toggleSeason(key, season.seasonNumber)}
                                 />
                                 <span className="request-season-number">
                                   {season.seasonNumber === 0 ? 'SP' : season.seasonNumber}
@@ -381,7 +414,7 @@ export default function RequestClient({ initialQuery = '' }) {
                           disabled={selectedDisabled}
                           onClick={() => submitRequest(result, selectedSeasons)}
                         >
-                          {requestingId === result.id
+                          {requestingId === key
                             ? 'Requesting...'
                             : alreadySent
                               ? 'Requested'
