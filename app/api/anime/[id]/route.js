@@ -1,9 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '../../../../lib/db';
+import { reconcileForRead } from '../../../../lib/library-reconciler';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(request, { params }) {
   try {
     const { id } = await params;
+    await reconcileForRead();
+
     const db = getDb();
     const anime = db.prepare('SELECT * FROM anime WHERE id = ?').get(id);
     

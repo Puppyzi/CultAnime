@@ -725,9 +725,7 @@ export default function WatchPage() {
         const video = videoRef.current;
         if (!video) return;
 
-        const hlsUrl = data.streamSessionId
-          ? `${data.hlsUrl}${data.hlsUrl.includes('?') ? '&' : '?'}cultanimeSession=${encodeURIComponent(data.streamSessionId)}`
-          : data.hlsUrl;
+        const hlsUrl = data.hlsUrl;
         const audioTrackOptions = Array.isArray(data.audioTracks) ? data.audioTracks : [];
         const subtitleTracks = Array.isArray(data.subtitles) ? data.subtitles : [];
         const selectedAudioExists = selectedAudioTrack !== 'default'

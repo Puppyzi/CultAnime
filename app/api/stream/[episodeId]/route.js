@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { getStreamUrl, getDirectStreamUrl } from '../../../../lib/jellyfin';
+import { getProxiedJellyfinUrl, getStreamUrl, getDirectStreamUrl } from '../../../../lib/jellyfin';
 import { chooseAudioTrack, chooseSubtitle, requiresBurnedInSubtitle, resolveEpisodePlayback } from '../../../../lib/playback';
 
 /**
  * GET /api/stream/[episodeId]
  *
- * Returns a JSON object with the Jellyfin HLS stream URL for the requested episode.
- * The frontend uses this URL with hls.js to play the video.
+ * Returns a JSON object with same-origin proxied Jellyfin playback URLs.
+ * The frontend uses the HLS URL with hls.js to play the video without exposing
+ * the private Jellyfin address to browsers.
  *
  * Flow:
  *   1. Look up the episode in our local SQLite database.
@@ -66,8 +67,8 @@ export async function GET(request, { params }) {
     return NextResponse.json({
       episodeId: episode.id,
       jellyfinItemId,
-      hlsUrl,
-      directUrl,
+      hlsUrl: getProxiedJellyfinUrl(hlsUrl),
+      directUrl: directUrl ? getProxiedJellyfinUrl(directUrl) : null,
       audioTracks,
       audioStreamIndex: audioTrack?.index ?? null,
       subtitles,
