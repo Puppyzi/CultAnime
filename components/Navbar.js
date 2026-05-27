@@ -70,7 +70,6 @@ export default function Navbar() {
           )
         ))}
       </div>
-      <span className="navbar-version" aria-label="Version 1.7">1.7</span>
       <div className="navbar-search" ref={searchRef}>
         <span className="search-icon">🔍</span>
         <input

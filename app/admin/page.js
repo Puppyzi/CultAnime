@@ -10,6 +10,7 @@ const emptyEpisodeEditForm = {
   runtime_minutes: '',
   overview: '',
 };
+const APP_VERSION = '1.8';
 
 function formatEpisodeDate(value) {
   if (!value) return 'No date';
@@ -440,7 +441,7 @@ export default function AdminPage() {
     <div className="admin-page">
       <div className="admin-page-header">
         <div>
-          <h1>Admin Panel</h1>
+          <h1>Admin Panel <span className="admin-version">v{APP_VERSION}</span></h1>
           <p className="subtitle">Manage your anime library</p>
         </div>
         <button type="button" className="btn btn-secondary btn-sm" onClick={logoutAdmin}>

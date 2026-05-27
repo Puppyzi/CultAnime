@@ -131,12 +131,6 @@ input, textarea, select { font-family: inherit; }
 }
 .navbar-links a:hover { color: var(--text-primary); }
 .navbar-links a.active { color: var(--accent); }
-.navbar-version {
-  flex: 0 0 auto;
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  font-weight: 700;
-}
 .navbar-search {
   position: relative; display: flex; align-items: center; margin-left: auto;
   flex: 0 0 auto; min-width: 0;
@@ -1240,6 +1234,19 @@ a.index-letter-link:focus-visible {
   gap: 1rem; margin-bottom: 1.5rem;
 }
 .admin-page h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.3rem; }
+.admin-version {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-left: 0.45rem;
+  padding: 0.12rem 0.42rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  font-size: 0.7rem;
+  font-weight: 800;
+}
 .admin-page .subtitle { color: var(--text-secondary); font-size: 0.85rem; }
 .admin-tabs { display: flex; gap: 0; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); }
 .admin-tab {
@@ -1630,7 +1637,6 @@ textarea.form-input { resize: vertical; min-height: 70px; }
     overflow: visible;
     font-size: 1.08rem;
   }
-  .navbar-version { display: none; }
   .navbar-search {
     grid-column: 2;
     grid-row: 1;
