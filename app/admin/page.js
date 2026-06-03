@@ -10,7 +10,7 @@ const emptyEpisodeEditForm = {
   runtime_minutes: '',
   overview: '',
 };
-const APP_VERSION = '1.9';
+const APP_VERSION = '2.0';
 
 function formatEpisodeDate(value) {
   if (!value) return 'No date';
