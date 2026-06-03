@@ -10,7 +10,7 @@ const emptyEpisodeEditForm = {
   runtime_minutes: '',
   overview: '',
 };
-const APP_VERSION = '2.0';
+const APP_VERSION = '2.1';
 
 function formatEpisodeDate(value) {
   if (!value) return 'No date';
@@ -90,6 +90,7 @@ export default function AdminPage() {
   const [rescanStarting, setRescanStarting] = useState(false);
   const [editingEpisodeId, setEditingEpisodeId] = useState(null);
   const [episodeEditForm, setEpisodeEditForm] = useState(emptyEpisodeEditForm);
+  const [serverRemovingId, setServerRemovingId] = useState(null);
 
   // Form state
   const [form, setForm] = useState({
@@ -195,15 +196,60 @@ export default function AdminPage() {
   }
 
   async function deleteAnime(id) {
-    if (!confirm('Delete this anime and all its episodes?')) return;
+    if (!confirm('Delete this anime from CultAnime only? Server files will not be touched.')) return;
     await fetch('/api/admin/anime', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
     });
-    showToast('Anime deleted');
+    showToast('Anime deleted from CultAnime');
     loadAnimeList();
     if (selectedAnime?.id === id) setSelectedAnime(null);
+  }
+
+  function serverRemovalMessage(data) {
+    const removal = data?.removal || {};
+
+    if (removal.media_type === 'movie') {
+      return 'Movie removed from Radarr, Jellyfin, and CultAnime.';
+    }
+
+    if (removal.scope === 'season' && removal.season_number) {
+      return `Season ${removal.season_number} removed from Sonarr, Jellyfin, and CultAnime.`;
+    }
+
+    return 'Series removed from Sonarr, Jellyfin, and CultAnime.';
+  }
+
+  async function removeAnimeFromServer(anime) {
+    const typed = window.prompt(
+      `Remove "${anime.title}" from the media server?\n\nThis deletes the managed files through Sonarr/Radarr, refreshes Jellyfin, and removes the CultAnime panel.\n\nType DELETE to confirm.`
+    );
+
+    if (typed !== 'DELETE') return;
+
+    setServerRemovingId(anime.id);
+    try {
+      const res = await fetch('/api/admin/server-remove', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ anime_id: anime.id, confirm: typed }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || `Server remove failed (${res.status})`);
+      }
+
+      showToast(serverRemovalMessage(data));
+      loadAnimeList();
+      loadSyncPreview();
+      loadRescanStatus({ silent: true });
+      if (selectedAnime?.id === anime.id) setSelectedAnime(null);
+    } catch (err) {
+      showToast(err.message || 'Server remove failed', 'error');
+    }
+    setServerRemovingId(null);
   }
 
   async function addEpisode(e) {
@@ -784,7 +830,15 @@ export default function AdminPage() {
                   </div>
                   <div className="actions">
                     <button className="btn btn-secondary btn-sm" onClick={() => selectAnime(a)}>Episodes</button>
-                    <button className="btn btn-sm" style={{ color: '#ef4444' }} onClick={() => deleteAnime(a.id)}>Delete</button>
+                    <button className="btn btn-sm" style={{ color: '#f97316' }} onClick={() => deleteAnime(a.id)}>Delete Local</button>
+                    <button
+                      className="btn btn-sm"
+                      style={{ color: '#ef4444' }}
+                      onClick={() => removeAnimeFromServer(a)}
+                      disabled={serverRemovingId === a.id}
+                    >
+                      {serverRemovingId === a.id ? 'Removing...' : 'Remove Server'}
+                    </button>
                   </div>
                 </div>
               ))}
