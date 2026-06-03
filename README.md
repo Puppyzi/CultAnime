@@ -42,6 +42,8 @@ PGID=568
 
 CultAnime also runs a Jellyfin reconciliation loop by default. `LIBRARY_RECONCILE_INTERVAL_MS` controls how often the app compares Jellyfin's current series/episode list with SQLite, and `LIBRARY_RECONCILE_ON_READ_INTERVAL_MS` controls the minimum time between reconciliation checks triggered by anime list requests. The default read interval is `0`, so a page refresh can remove stale anime panels after Jellyfin has dropped a deleted series; raise this value if you prefer faster list responses over immediate cleanup.
 
+When recent episodes are missing overviews, CultAnime can also ask Jellyfin to retry metadata for those episode items during reconciliation. This is enabled by default and is rate-limited per item by `MISSING_EPISODE_METADATA_REFRESH_INTERVAL_MS` (default 15 minutes). `MISSING_EPISODE_METADATA_REFRESH_LOOKBACK_DAYS` controls how far back episodes are considered, and `MISSING_EPISODE_METADATA_REFRESH_BATCH_LIMIT` limits each reconciliation batch.
+
 On the server, `LOCAL_MEDIA_PRUNE_ENABLED=true` lets CultAnime remove episode rows when the underlying media files are gone from `MEDIA_ROOT`. If every episode appears missing at once, CultAnime skips local pruning unless `LOCAL_MEDIA_PRUNE_ALLOW_MASS_DELETE=true`, which protects against an accidentally unmounted media folder.
 
 The admin page and `/api/admin/*` routes are protected by `ADMIN_PASSWORD`. After a successful login, CultAnime sets a signed HTTP-only admin session cookie. The cookie is marked secure automatically when the request is HTTPS or includes `x-forwarded-proto=https`; set `ADMIN_COOKIE_SECURE=true` only if your HTTPS proxy does not pass that header.

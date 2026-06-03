@@ -70,6 +70,18 @@ function episodeMetaText(ep) {
   return [formatEpisodeDate(ep.air_date), formatEpisodeRuntime(ep.duration)].filter(Boolean).join(' | ');
 }
 
+function episodeTotalFor(anime) {
+  const metadataTotal = Number(anime?.episodes_total) || 0;
+  const maxEpisodeNumber = Math.max(
+    0,
+    ...(anime?.episodes || []).map(episode => Number(episode.episode_number) || 0)
+  );
+  const availableCount = anime?.episodes?.length || 0;
+  const total = Math.max(metadataTotal, maxEpisodeNumber, availableCount);
+
+  return total > 0 ? total : null;
+}
+
 function getSubtitleId(subtitle) {
   return String(subtitle.index);
 }
@@ -990,6 +1002,7 @@ export default function WatchPage() {
   const nextEp = anime?.episodes?.find(e => e.episode_number === episodeNum + 1);
   const prevEp = anime?.episodes?.find(e => e.episode_number === episodeNum - 1);
   const currentEpMeta = currentEp ? episodeMetaText(currentEp) : '';
+  const episodeTotal = episodeTotalFor(anime);
 
   if (loading) {
     return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
@@ -1048,7 +1061,7 @@ export default function WatchPage() {
               </Link>
               <div className="player-title-row">
                 <h1>{currentEp.title || `Episode ${currentEp.episode_number}`}</h1>
-                <span className="episode-label">Episode {currentEp.episode_number}{anime.episodes_total ? ` of ${anime.episodes_total}` : ''}</span>
+                <span className="episode-label">Episode {currentEp.episode_number}{episodeTotal ? ` of ${episodeTotal}` : ''}</span>
               </div>
             </div>
             {(audioTracks.length > 1 || subtitles.length > 0) && (
@@ -1114,7 +1127,7 @@ export default function WatchPage() {
               {currentEp.overview ? (
                 <p>{currentEp.overview}</p>
               ) : (
-                <p>{anime.description}</p>
+                <p className="muted">No episode summary available yet.</p>
               )}
             </div>
           </div>

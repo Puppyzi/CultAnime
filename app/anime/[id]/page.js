@@ -33,6 +33,18 @@ function episodeMetaText(ep) {
   return [formatAirDate(ep.air_date), formatRuntime(ep)].filter(Boolean).join(' | ');
 }
 
+function episodeTotalFor(anime) {
+  const metadataTotal = Number(anime?.episodes_total) || 0;
+  const maxEpisodeNumber = Math.max(
+    0,
+    ...(anime?.episodes || []).map(episode => Number(episode.episode_number) || 0)
+  );
+  const availableCount = anime?.episodes?.length || 0;
+  const total = Math.max(metadataTotal, maxEpisodeNumber, availableCount);
+
+  return total > 0 ? total : null;
+}
+
 function episodeThumbnailUrl(ep, width = 320, height = 180) {
   return `/api/thumbnail/${ep.id}?width=${width}&height=${height}`;
 }
@@ -252,6 +264,8 @@ export default function AnimeDetailPage() {
 
   if (!anime) return <div className="empty-state"><h3>Anime not found</h3></div>;
 
+  const episodeTotal = episodeTotalFor(anime);
+
   return (
     <div>
       <div className="anime-detail-banner">
@@ -288,7 +302,7 @@ export default function AnimeDetailPage() {
             {anime.status && <span className="stat-badge">{anime.status}</span>}
             {anime.year && <span className="stat-badge">{anime.year}</span>}
             {anime.format && <span className="stat-badge">{anime.format}</span>}
-            {anime.episodes_total && <span className="stat-badge">{anime.episodes_total} Episodes</span>}
+            {episodeTotal && <span className="stat-badge">{episodeTotal} Episodes</span>}
           </div>
 
           <div className="genre-tags">
