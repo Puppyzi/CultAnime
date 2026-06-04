@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { getDb } from '../../lib/db';
+import { mediaFormatLabel } from '../../lib/media-format';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +23,9 @@ function sectionId(letter) {
 function metaFor(anime) {
   const parts = [];
   const episodeTotal = anime.episode_count || anime.episodes_total;
+  const format = mediaFormatLabel(anime.format);
 
+  if (format) parts.push(format);
   if (episodeTotal) parts.push(`${episodeTotal} EP`);
   if (anime.year) parts.push(String(anime.year));
   if (anime.rating) parts.push(`${anime.rating}%`);

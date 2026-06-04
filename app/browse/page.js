@@ -2,6 +2,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { mediaFormatLabel } from '../../lib/media-format';
 
 const ALL_GENRES = ['Action','Adventure','Comedy','Drama','Fantasy','Horror','Mecha','Music','Mystery','Psychological','Romance','Sci-Fi','Slice of Life','Sports','Supernatural','Thriller'];
 
@@ -101,6 +102,7 @@ export default function BrowsePage() {
 function BrowseAnimeCard({ a }) {
   const router = useRouter();
   const [isFlipping, setIsFlipping] = useState(false);
+  const formatLabel = mediaFormatLabel(a.format);
 
   const handleClick = (e) => {
     e.preventDefault();
@@ -113,15 +115,20 @@ function BrowseAnimeCard({ a }) {
 
   return (
     <a href={`/anime/${a.id}`} onClick={handleClick} className={`anime-card ${isFlipping ? 'card-flip-out' : ''}`}>
-      <img className="anime-card-image" src={a.cover_image || '/placeholder.png'} alt={a.title} />
-      <div className="anime-card-overlay">
-        <span className="btn btn-primary btn-sm">▶ Watch</span>
+      <div className="anime-card-image-wrap">
+        <img className="anime-card-image" src={a.cover_image || '/placeholder.png'} alt={a.title} />
+        <div className="anime-card-badge">
+          {formatLabel && <span className="badge-format">{formatLabel}</span>}
+          {a.episode_count > 0 && <span className="badge-eps">{a.episode_count} EP</span>}
+        </div>
+        <div className="anime-card-overlay">
+          <span className="btn btn-primary btn-sm">▶ Watch</span>
+        </div>
       </div>
       <div className="anime-card-info">
         <div className="anime-card-title">{a.title}</div>
         <div className="anime-card-meta">
           {a.rating && <span className="anime-card-rating">⭐ {a.rating}%</span>}
-          {a.episode_count > 0 && <span>{a.episode_count} eps</span>}
         </div>
       </div>
     </a>

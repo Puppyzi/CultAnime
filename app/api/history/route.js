@@ -8,7 +8,7 @@ export async function GET() {
     const sessionId = await getSessionId();
     const db = getDb();
     const history = db.prepare(`
-      SELECT wh.*, e.episode_number, e.anime_id, a.title, a.cover_image, a.title_romaji
+      SELECT wh.*, e.episode_number, e.anime_id, a.title, a.cover_image, a.title_romaji, a.format
       FROM watch_history wh
       JOIN episodes e ON wh.episode_id = e.id
       JOIN anime a ON wh.anime_id = a.id

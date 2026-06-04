@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { mediaFormatLabel } from '../lib/media-format';
 export default function HomePage() {
   const [anime, setAnime] = useState([]);
   const [history, setHistory] = useState([]);
@@ -41,6 +42,7 @@ export default function HomePage() {
 
   const popular = [...anime].sort((a, b) => (b.rating || 0) - (a.rating || 0));
   const featured = anime[featuredIndex] || anime[0] || null;
+  const featuredFormatLabel = featured ? mediaFormatLabel(featured.format) : '';
 
   if (loading) {
     return (
@@ -76,6 +78,7 @@ export default function HomePage() {
             <h1>{featured.title}</h1>
             <div className="hero-meta">
               {featured.rating && <span>⭐ {featured.rating}%</span>}
+              {featuredFormatLabel && <span>{featuredFormatLabel}</span>}
               {featured.year && <span>{featured.year}</span>}
               {featured.episodes_total && <span>{featured.episodes_total} EP</span>}
               {featured.genres?.slice(0, 3).map(g => <span key={g}>{g}</span>)}
@@ -150,6 +153,7 @@ function ContinueWatchingCard({ item }) {
   const router = useRouter();
   const [isFlipping, setIsFlipping] = useState(false);
   const href = `/watch/${item.anime_id}/${item.episode_number}`;
+  const formatLabel = mediaFormatLabel(item.format);
   const progressPercent = item.duration > 0
     ? Math.min(100, Math.max(0, (item.progress / item.duration) * 100))
     : 0;
@@ -167,6 +171,11 @@ function ContinueWatchingCard({ item }) {
     <a href={href} onClick={handleClick} className={`anime-card ${isFlipping ? 'card-flip-out' : ''}`}>
       <div className="anime-card-image-wrap">
         <img className="anime-card-image" src={item.cover_image || '/placeholder.png'} alt={item.title} />
+        {formatLabel && (
+          <div className="anime-card-badge">
+            <span className="badge-format">{formatLabel}</span>
+          </div>
+        )}
         {item.duration > 0 && (
           <div className="card-progress">
             <div className="card-progress-bar" style={{ width: `${progressPercent}%` }} />
@@ -187,6 +196,7 @@ function ContinueWatchingCard({ item }) {
 function AnimeCard({ anime }) {
   const router = useRouter();
   const [isFlipping, setIsFlipping] = useState(false);
+  const formatLabel = mediaFormatLabel(anime.format);
 
   const handleClick = (e) => {
     e.preventDefault();
@@ -202,6 +212,7 @@ function AnimeCard({ anime }) {
       <div className="anime-card-image-wrap">
         <img className="anime-card-image" src={anime.cover_image || '/placeholder.png'} alt={anime.title} />
         <div className="anime-card-badge">
+          {formatLabel && <span className="badge-format">{formatLabel}</span>}
           {anime.episode_count > 0 && <span className="badge-eps">{anime.episode_count} EP</span>}
         </div>
         <div className="anime-card-overlay">

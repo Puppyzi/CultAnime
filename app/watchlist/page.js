@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { mediaFormatLabel } from '../../lib/media-format';
 
 export default function WatchlistPage() {
   const [watchlist, setWatchlist] = useState([]);
@@ -49,24 +50,35 @@ export default function WatchlistPage() {
         </div>
       ) : (
         <div className="anime-grid">
-          {watchlist.map(w => (
-            <div key={w.anime_id} className="anime-card" style={{ position: 'relative' }}>
-              <Link href={`/anime/${w.anime_id}`}>
-                <img className="anime-card-image" src={w.cover_image} alt={w.title} />
-                <div className="anime-card-info">
-                  <div className="anime-card-title">{w.title}</div>
-                  <div className="anime-card-meta">
-                    {w.rating && <span className="anime-card-rating">⭐ {w.rating}%</span>}
-                    {w.year && <span>{w.year}</span>}
+          {watchlist.map(w => {
+            const formatLabel = mediaFormatLabel(w.format);
+
+            return (
+              <div key={w.anime_id} className="anime-card" style={{ position: 'relative' }}>
+                <Link href={`/anime/${w.anime_id}`}>
+                  <div className="anime-card-image-wrap">
+                    <img className="anime-card-image" src={w.cover_image} alt={w.title} />
+                    {formatLabel && (
+                      <div className="anime-card-badge">
+                        <span className="badge-format">{formatLabel}</span>
+                      </div>
+                    )}
                   </div>
-                </div>
-              </Link>
-              <button onClick={() => remove(w.anime_id)}
-                style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', background: 'rgba(0,0,0,0.7)', borderRadius: '50%', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', border: '1px solid var(--border)' }}>
-                ✕
-              </button>
-            </div>
-          ))}
+                  <div className="anime-card-info">
+                    <div className="anime-card-title">{w.title}</div>
+                    <div className="anime-card-meta">
+                      {w.rating && <span className="anime-card-rating">⭐ {w.rating}%</span>}
+                      {w.year && <span>{w.year}</span>}
+                    </div>
+                  </div>
+                </Link>
+                <button onClick={() => remove(w.anime_id)}
+                  style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', background: 'rgba(0,0,0,0.7)', borderRadius: '50%', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', border: '1px solid var(--border)' }}>
+                  ✕
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

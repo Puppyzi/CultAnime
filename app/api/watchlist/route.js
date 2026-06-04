@@ -8,7 +8,7 @@ export async function GET() {
     const sessionId = await getSessionId();
     const db = getDb();
     const watchlist = db.prepare(`
-      SELECT w.*, a.title, a.cover_image, a.genres, a.rating, a.episodes_total, a.year
+      SELECT w.*, a.title, a.cover_image, a.genres, a.rating, a.episodes_total, a.year, a.format
       FROM watchlist w
       JOIN anime a ON w.anime_id = a.id
       WHERE w.session_id = ?
