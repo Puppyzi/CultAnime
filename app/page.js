@@ -1,13 +1,15 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { mediaFormatLabel } from '../lib/media-format';
+import { mediaStatusBadgeLabel } from '../lib/media-status';
 export default function HomePage() {
   const [anime, setAnime] = useState([]);
   const [history, setHistory] = useState([]);
   const [featuredIndex, setFeaturedIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  const heroSwipeRef = useRef({ active: false, startX: 0, startY: 0 });
 
   useEffect(() => {
     async function load() {
@@ -34,7 +36,7 @@ export default function HomePage() {
     if (anime.length <= 1) return;
 
     const intervalId = setInterval(() => {
-      setFeaturedIndex(current => (current + 1) % anime.length);
+      goToNextHero();
     }, 6500);
 
     return () => clearInterval(intervalId);
@@ -43,6 +45,49 @@ export default function HomePage() {
   const popular = [...anime].sort((a, b) => (b.rating || 0) - (a.rating || 0));
   const featured = anime[featuredIndex] || anime[0] || null;
   const featuredFormatLabel = featured ? mediaFormatLabel(featured.format) : '';
+  const canSwipeHero = anime.length > 1;
+
+  function goToHero(index) {
+    if (anime.length === 0) return;
+    setFeaturedIndex(((index % anime.length) + anime.length) % anime.length);
+  }
+
+  function goToPreviousHero() {
+    setFeaturedIndex(current => (current - 1 + anime.length) % anime.length);
+  }
+
+  function goToNextHero() {
+    setFeaturedIndex(current => (current + 1) % anime.length);
+  }
+
+  function handleHeroPointerDown(e) {
+    if (!canSwipeHero || e.target.closest('a, button')) return;
+    heroSwipeRef.current = {
+      active: true,
+      startX: e.clientX,
+      startY: e.clientY,
+    };
+  }
+
+  function handleHeroPointerUp(e) {
+    const swipe = heroSwipeRef.current;
+    heroSwipeRef.current = { active: false, startX: 0, startY: 0 };
+    if (!swipe.active || !canSwipeHero) return;
+
+    const deltaX = e.clientX - swipe.startX;
+    const deltaY = e.clientY - swipe.startY;
+    if (Math.abs(deltaX) < 48 || Math.abs(deltaX) < Math.abs(deltaY) * 1.4) return;
+
+    if (deltaX < 0) {
+      goToNextHero();
+    } else {
+      goToPreviousHero();
+    }
+  }
+
+  function handleHeroPointerCancel() {
+    heroSwipeRef.current = { active: false, startX: 0, startY: 0 };
+  }
 
   if (loading) {
     return (
@@ -71,7 +116,13 @@ export default function HomePage() {
   return (
     <>
       {featured && (
-        <div className="hero">
+        <div
+          className="hero"
+          onPointerDown={handleHeroPointerDown}
+          onPointerUp={handleHeroPointerUp}
+          onPointerCancel={handleHeroPointerCancel}
+          onPointerLeave={handleHeroPointerCancel}
+        >
           <div key={`hero-bg-${featured.id}`} className="hero-bg" style={{ backgroundImage: `url(${featured.banner_image || featured.cover_image})` }} />
           <div className="hero-overlay" />
           <div key={`hero-content-${featured.id}`} className="hero-content">
@@ -89,6 +140,24 @@ export default function HomePage() {
               <Link href={`/anime/${featured.id}`} className="btn btn-secondary">Detail</Link>
             </div>
           </div>
+          {canSwipeHero && (
+            <>
+              {anime.length <= 12 && (
+                <div className="hero-carousel-dots" aria-label="Featured anime slides">
+                  {anime.map((item, index) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`hero-carousel-dot ${index === featuredIndex ? 'active' : ''}`}
+                      onClick={() => goToHero(index)}
+                      aria-label={`Show ${item.title}`}
+                      aria-current={index === featuredIndex ? 'true' : undefined}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -197,6 +266,7 @@ function AnimeCard({ anime }) {
   const router = useRouter();
   const [isFlipping, setIsFlipping] = useState(false);
   const formatLabel = mediaFormatLabel(anime.format);
+  const statusLabel = mediaStatusBadgeLabel(anime);
 
   const handleClick = (e) => {
     e.preventDefault();
@@ -214,6 +284,7 @@ function AnimeCard({ anime }) {
         <div className="anime-card-badge">
           {formatLabel && <span className="badge-format">{formatLabel}</span>}
           {anime.episode_count > 0 && <span className="badge-eps">{anime.episode_count} EP</span>}
+          {statusLabel && <span className="badge-status">{statusLabel}</span>}
         </div>
         <div className="anime-card-overlay">
           <span className="btn btn-primary btn-sm">▶ Watch</span>

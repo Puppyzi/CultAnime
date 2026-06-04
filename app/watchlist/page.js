@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { mediaFormatLabel } from '../../lib/media-format';
+import { mediaStatusBadgeLabel } from '../../lib/media-status';
 
 export default function WatchlistPage() {
   const [watchlist, setWatchlist] = useState([]);
@@ -52,15 +53,18 @@ export default function WatchlistPage() {
         <div className="anime-grid">
           {watchlist.map(w => {
             const formatLabel = mediaFormatLabel(w.format);
+            const statusLabel = mediaStatusBadgeLabel(w);
 
             return (
               <div key={w.anime_id} className="anime-card" style={{ position: 'relative' }}>
                 <Link href={`/anime/${w.anime_id}`}>
                   <div className="anime-card-image-wrap">
                     <img className="anime-card-image" src={w.cover_image} alt={w.title} />
-                    {formatLabel && (
+                    {(formatLabel || w.episode_count > 0 || statusLabel) && (
                       <div className="anime-card-badge">
-                        <span className="badge-format">{formatLabel}</span>
+                        {formatLabel && <span className="badge-format">{formatLabel}</span>}
+                        {w.episode_count > 0 && <span className="badge-eps">{w.episode_count} EP</span>}
+                        {statusLabel && <span className="badge-status">{statusLabel}</span>}
                       </div>
                     )}
                   </div>

@@ -3,6 +3,7 @@ import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { mediaFormatLabel } from '../../lib/media-format';
+import { mediaStatusBadgeLabel } from '../../lib/media-status';
 
 const ALL_GENRES = ['Action','Adventure','Comedy','Drama','Fantasy','Horror','Mecha','Music','Mystery','Psychological','Romance','Sci-Fi','Slice of Life','Sports','Supernatural','Thriller'];
 
@@ -103,6 +104,7 @@ function BrowseAnimeCard({ a }) {
   const router = useRouter();
   const [isFlipping, setIsFlipping] = useState(false);
   const formatLabel = mediaFormatLabel(a.format);
+  const statusLabel = mediaStatusBadgeLabel(a);
 
   const handleClick = (e) => {
     e.preventDefault();
@@ -120,6 +122,7 @@ function BrowseAnimeCard({ a }) {
         <div className="anime-card-badge">
           {formatLabel && <span className="badge-format">{formatLabel}</span>}
           {a.episode_count > 0 && <span className="badge-eps">{a.episode_count} EP</span>}
+          {statusLabel && <span className="badge-status">{statusLabel}</span>}
         </div>
         <div className="anime-card-overlay">
           <span className="btn btn-primary btn-sm">▶ Watch</span>

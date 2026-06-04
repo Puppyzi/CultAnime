@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 
 const SUBTITLE_PREF_KEY = 'cultanime.subtitleTrack';
 const AUDIO_PREF_KEY = 'cultanime.audioTrack';
+const NEXT_AIRING_HIDDEN_KEY = 'cultanime.nextAiringHidden';
 
 function mediaPreferenceKey(baseKey, animeId) {
   return animeId ? `${baseKey}.${animeId}` : baseKey;
@@ -45,6 +46,26 @@ function removeMediaPreference(baseKey, animeId) {
   }
 }
 
+function readNextAiringHidden() {
+  try {
+    return window.sessionStorage.getItem(NEXT_AIRING_HIDDEN_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function writeNextAiringHidden(hidden) {
+  try {
+    if (hidden) {
+      window.sessionStorage.setItem(NEXT_AIRING_HIDDEN_KEY, 'true');
+    } else {
+      window.sessionStorage.removeItem(NEXT_AIRING_HIDDEN_KEY);
+    }
+  } catch {
+    // Temporary preference persistence is optional.
+  }
+}
+
 function episodeThumbnailUrl(ep, width = 320, height = 180) {
   return `/api/thumbnail/${ep.id}?width=${width}&height=${height}`;
 }
@@ -80,6 +101,95 @@ function episodeTotalFor(anime) {
   const total = Math.max(metadataTotal, maxEpisodeNumber, availableCount);
 
   return total > 0 ? total : null;
+}
+
+function formatNextAiringDate(airingAt) {
+  const date = new Date(Number(airingAt) * 1000);
+  if (Number.isNaN(date.valueOf())) return null;
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  }).formatToParts(date);
+  const part = type => parts.find(item => item.type === type)?.value || '';
+  const year = part('year');
+  const month = part('month');
+  const day = part('day');
+  const hour = part('hour');
+  const minute = part('minute');
+  const dayPeriod = part('dayPeriod');
+  const timeZoneName = part('timeZoneName');
+
+  return `${year}/${month}/${day} ${hour}:${minute} ${dayPeriod} ${timeZoneName}`.trim();
+}
+
+function pluralUnit(value, unit) {
+  return `${value} ${unit}${value === 1 ? '' : 's'}`;
+}
+
+function formatCountdown(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  return `(${[
+    pluralUnit(days, 'day'),
+    pluralUnit(hours, 'hour'),
+    pluralUnit(minutes, 'minute'),
+    pluralUnit(seconds, 'second'),
+  ].join(', ')})`;
+}
+
+function NextAiringCountdown({ nextAiringEpisode, onDismiss }) {
+  const airingAt = Number(nextAiringEpisode?.airingAt);
+  const episode = Number(nextAiringEpisode?.episode);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (!Number.isFinite(airingAt)) return undefined;
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [airingAt]);
+
+  if (!Number.isFinite(airingAt) || airingAt <= 0) return null;
+
+  const releaseMs = airingAt * 1000;
+  const remainingMs = releaseMs - now;
+  const dateText = formatNextAiringDate(airingAt);
+
+  return (
+    <div className="next-airing-strip" aria-live="polite">
+      <span className="next-airing-kicker">Next Episode</span>
+      {remainingMs <= 0 ? (
+        <span className="next-airing-main">Episode will be released soon.</span>
+      ) : (
+        <>
+          <span className="next-airing-main">
+            {episode ? `EP ${episode}` : 'Episode'} expected{dateText ? ` ${dateText}` : ''}
+          </span>
+          <span className="next-airing-countdown">{formatCountdown(remainingMs)}</span>
+        </>
+      )}
+      <button
+        type="button"
+        className="next-airing-dismiss"
+        onClick={onDismiss}
+        aria-label="Hide next episode countdown"
+      >
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M6 6l8 8M14 6l-8 8" />
+        </svg>
+      </button>
+    </div>
+  );
 }
 
 function getSubtitleId(subtitle) {
@@ -587,6 +697,7 @@ export default function WatchPage() {
   const [mpvStatus, setMpvStatus] = useState('');
   const [inWatchlist, setInWatchlist] = useState(false);
   const [watchlistBusy, setWatchlistBusy] = useState(false);
+  const [nextAiringHidden, setNextAiringHidden] = useState(false);
 
   const animeIdNumber = Number.parseInt(animeId, 10);
   const episodeNum = parseInt(ep);
@@ -616,6 +727,46 @@ export default function WatchPage() {
     setSelectedSubtitle(readMediaPreference(SUBTITLE_PREF_KEY, animeId) || 'auto');
     setSubtitleMode('soft');
   }, [animeId]);
+
+  useEffect(() => {
+    setNextAiringHidden(readNextAiringHidden());
+
+    function clearHiddenPreference() {
+      writeNextAiringHidden(false);
+    }
+
+    function handleDocumentClick(event) {
+      const link = event.target.closest?.('a[href]');
+      if (!link) return;
+
+      const href = link.getAttribute('href');
+      if (!href || href.startsWith('#')) return;
+
+      let url;
+      try {
+        url = new URL(href, window.location.href);
+      } catch {
+        return;
+      }
+
+      if (url.origin === window.location.origin && !url.pathname.startsWith('/watch/')) {
+        clearHiddenPreference();
+      }
+    }
+
+    window.addEventListener('beforeunload', clearHiddenPreference);
+    document.addEventListener('click', handleDocumentClick, true);
+
+    return () => {
+      window.removeEventListener('beforeunload', clearHiddenPreference);
+      document.removeEventListener('click', handleDocumentClick, true);
+    };
+  }, []);
+
+  function handleNextAiringDismiss() {
+    setNextAiringHidden(true);
+    writeNextAiringHidden(true);
+  }
 
   // Load anime data
   useEffect(() => {
@@ -1064,40 +1215,48 @@ export default function WatchPage() {
                 <span className="episode-label">Episode {currentEp.episode_number}{episodeTotal ? ` of ${episodeTotal}` : ''}</span>
               </div>
             </div>
-            {(audioTracks.length > 1 || subtitles.length > 0) && (
-              <div className="media-controls">
-                {audioTracks.length > 1 && (
-                  <MediaDropdown
-                    label="Audio"
-                    value={selectedAudioTrack}
-                    disabled={streamLoading}
-                    onChange={handleAudioTrackChange}
-                    options={[
-                      { value: 'default', label: 'Default' },
-                      ...audioTracks.map(track => ({
-                        value: getAudioTrackId(track),
-                        label: track.title,
-                      })),
-                    ]}
-                  />
-                )}
-                {subtitles.length > 0 && (
-                  <MediaDropdown
-                    label="Subtitles"
-                    value={selectedSubtitle}
-                    disabled={streamLoading}
-                    onChange={handleSubtitleChange}
-                    options={[
-                      { value: 'off', label: 'Off' },
-                      ...subtitles.map(sub => ({
-                        value: getSubtitleId(sub),
-                        label: sub.title,
-                      })),
-                    ]}
-                  />
-                )}
-              </div>
-            )}
+            <div className="player-header-aside">
+              {!nextAiringHidden && (
+                <NextAiringCountdown
+                  nextAiringEpisode={anime.next_airing_episode}
+                  onDismiss={handleNextAiringDismiss}
+                />
+              )}
+              {(audioTracks.length > 1 || subtitles.length > 0) && (
+                <div className="media-controls">
+                  {audioTracks.length > 1 && (
+                    <MediaDropdown
+                      label="Audio"
+                      value={selectedAudioTrack}
+                      disabled={streamLoading}
+                      onChange={handleAudioTrackChange}
+                      options={[
+                        { value: 'default', label: 'Default' },
+                        ...audioTracks.map(track => ({
+                          value: getAudioTrackId(track),
+                          label: track.title,
+                        })),
+                      ]}
+                    />
+                  )}
+                  {subtitles.length > 0 && (
+                    <MediaDropdown
+                      label="Subtitles"
+                      value={selectedSubtitle}
+                      disabled={streamLoading}
+                      onChange={handleSubtitleChange}
+                      options={[
+                        { value: 'off', label: 'Off' },
+                        ...subtitles.map(sub => ({
+                          value: getSubtitleId(sub),
+                          label: sub.title,
+                        })),
+                      ]}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           <div className="player-episode-summary">
             <img
