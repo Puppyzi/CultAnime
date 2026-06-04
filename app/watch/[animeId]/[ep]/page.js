@@ -87,6 +87,20 @@ function formatEpisodeRuntime(seconds) {
   return `${Math.max(1, Math.round(Number(seconds) / 60))}m`;
 }
 
+function formatPlaybackTime(seconds) {
+  const totalSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
+  const paddedSeconds = String(remainingSeconds).padStart(2, '0');
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${paddedSeconds}`;
+  }
+
+  return `${minutes}:${paddedSeconds}`;
+}
+
 function episodeMetaText(ep) {
   return [formatEpisodeDate(ep.air_date), formatEpisodeRuntime(ep.duration)].filter(Boolean).join(' | ');
 }
@@ -188,6 +202,69 @@ function NextAiringCountdown({ nextAiringEpisode, onDismiss }) {
           <path d="M6 6l8 8M14 6l-8 8" />
         </svg>
       </button>
+    </div>
+  );
+}
+
+function videoDuration(video, fallbackDuration) {
+  const duration = Number(video?.duration);
+  if (Number.isFinite(duration) && duration > 0) return duration;
+
+  const fallback = Number(fallbackDuration);
+  return Number.isFinite(fallback) && fallback > 0 ? fallback : 0;
+}
+
+function clamp(value, min = 0, max = 1) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function HoverTimeTooltip({ videoRef, videoKey, fallbackDuration }) {
+  const [hoverPreview, setHoverPreview] = useState(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return undefined;
+
+    function updatePreview(event) {
+      const duration = videoDuration(video, fallbackDuration);
+      if (!duration) {
+        setHoverPreview(null);
+        return;
+      }
+
+      const rect = video.getBoundingClientRect();
+      const seekZoneTop = rect.bottom - 26;
+      const seekZoneBottom = rect.bottom - 19;
+      if (event.clientY < seekZoneTop || event.clientY > seekZoneBottom) {
+        setHoverPreview(null);
+        return;
+      }
+
+      const ratio = clamp((event.clientX - rect.left) / Math.max(rect.width, 1));
+      setHoverPreview({
+        ratio,
+        tooltipRatio: clamp(ratio, 0.04, 0.96),
+        time: duration * ratio,
+      });
+    }
+
+    function clearPreview() {
+      setHoverPreview(null);
+    }
+
+    video.addEventListener('pointermove', updatePreview);
+    video.addEventListener('pointerleave', clearPreview);
+    return () => {
+      video.removeEventListener('pointermove', updatePreview);
+      video.removeEventListener('pointerleave', clearPreview);
+    };
+  }, [videoRef, videoKey, fallbackDuration]);
+
+  if (!hoverPreview) return null;
+
+  return (
+    <div className="player-hover-time-tooltip" style={{ left: `${hoverPreview.tooltipRatio * 100}%` }}>
+      {formatPlaybackTime(hoverPreview.time)}
     </div>
   );
 }
@@ -1201,6 +1278,13 @@ export default function WatchPage() {
                 onPause={saveProgress}
                 crossOrigin="anonymous"
               />
+              {currentEp && (
+                <HoverTimeTooltip
+                  videoRef={videoRef}
+                  videoKey={playerDomKey}
+                  fallbackDuration={currentEp.duration}
+                />
+              )}
             </>
           )}
         </div>

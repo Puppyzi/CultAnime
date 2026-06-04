@@ -454,6 +454,13 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
 .player-main { background: #000; display: flex; flex-direction: column; min-width: 0; }
 .video-container { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; }
 .video-container video { width: 100%; height: 100%; }
+.player-hover-time-tooltip {
+  position: absolute; bottom: 30px; z-index: 4; transform: translateX(-50%);
+  padding: 0.22rem 0.42rem; border-radius: 4px;
+  background: rgba(10,10,10,0.94); border: 1px solid var(--border);
+  color: var(--text-primary); font-size: 0.72rem; font-weight: 700;
+  white-space: nowrap; pointer-events: none; box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
 .player-info {
   display: grid; grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.65rem 1rem; align-items: center;
