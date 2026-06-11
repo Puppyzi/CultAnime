@@ -2,10 +2,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import Hls from 'hls.js';
 
 const SUBTITLE_PREF_KEY = 'cultanime.subtitleTrack';
 const AUDIO_PREF_KEY = 'cultanime.audioTrack';
 const NEXT_AIRING_HIDDEN_KEY = 'cultanime.nextAiringHidden';
+const STALL_RECOVERY_DELAY_MS = 12000;
+const MAX_AUTOMATIC_STREAM_RELOADS = 2;
 
 function mediaPreferenceKey(baseKey, animeId) {
   return animeId ? `${baseKey}.${animeId}` : baseKey;
@@ -684,11 +687,14 @@ export default function WatchPage() {
   const hlsRef = useRef(null);
   const saveInterval = useRef(null);
   const streamRunRef = useRef(0);
+  const playbackResumeTimeRef = useRef(0);
+  const automaticStreamReloadsRef = useRef(0);
   const [anime, setAnime] = useState(null);
   const [currentEp, setCurrentEp] = useState(null);
   const [loading, setLoading] = useState(true);
   const [streamError, setStreamError] = useState(null);
   const [streamLoading, setStreamLoading] = useState(false);
+  const [streamReloadKey, setStreamReloadKey] = useState(0);
   const [audioTracks, setAudioTracks] = useState([]);
   const [selectedAudioTrack, setSelectedAudioTrack] = useState('default');
   const [subtitles, setSubtitles] = useState([]);
@@ -768,6 +774,16 @@ export default function WatchPage() {
     writeNextAiringHidden(true);
   }
 
+  const retryPlayback = useCallback(() => {
+    const currentTime = Number(videoRef.current?.currentTime);
+    if (Number.isFinite(currentTime) && currentTime > 0) {
+      playbackResumeTimeRef.current = currentTime;
+    }
+    automaticStreamReloadsRef.current = 0;
+    setStreamError(null);
+    setStreamReloadKey(value => value + 1);
+  }, []);
+
   // Load anime data
   useEffect(() => {
     let active = true;
@@ -777,6 +793,8 @@ export default function WatchPage() {
     setStreamError(null);
     setAudioTracks([]);
     setSubtitles([]);
+    playbackResumeTimeRef.current = 0;
+    automaticStreamReloadsRef.current = 0;
 
     async function load() {
       try {
@@ -849,6 +867,7 @@ export default function WatchPage() {
     const abortController = new AbortController();
     const ownedVideo = videoRef.current;
     let active = true;
+    let removeVideoRecoveryListeners = () => {};
     const isActive = () => active
       && streamRunRef.current === streamRunId
       && !abortController.signal.aborted;
@@ -887,6 +906,20 @@ export default function WatchPage() {
 
         const video = videoRef.current;
         if (!video) return;
+
+        const resumeAt = playbackResumeTimeRef.current;
+        const restorePlaybackPosition = () => {
+          if (!Number.isFinite(resumeAt) || resumeAt <= 0) return;
+          const maxTime = Number.isFinite(video.duration) && video.duration > 0
+            ? Math.max(0, video.duration - 0.25)
+            : resumeAt;
+          video.currentTime = Math.min(resumeAt, maxTime);
+          playbackResumeTimeRef.current = 0;
+        };
+        video.addEventListener('loadedmetadata', restorePlaybackPosition, { once: true });
+        removeVideoRecoveryListeners = () => {
+          video.removeEventListener('loadedmetadata', restorePlaybackPosition);
+        };
 
         const hlsUrl = data.hlsUrl;
         const audioTrackOptions = Array.isArray(data.audioTracks) ? data.audioTracks : [];
@@ -930,26 +963,6 @@ export default function WatchPage() {
           installSubtitleTracks(video, subtitleTracks, initialSubtitle);
         }
 
-        const loadScript = (src, id) => new Promise((resolve, reject) => {
-          if (window[id]) return resolve();
-          const existing = document.querySelector(`script[data-${id.toLowerCase()}]`);
-          if (existing) {
-            existing.addEventListener('load', resolve, { once: true });
-            existing.addEventListener('error', reject, { once: true });
-            return;
-          }
-          const script = document.createElement('script');
-          script.src = src;
-          script.setAttribute(`data-${id.toLowerCase()}`, 'true');
-          script.onload = resolve;
-          script.onerror = reject;
-          document.head.appendChild(script);
-        });
-
-        await loadScript('https://cdn.jsdelivr.net/npm/hls.js@latest', 'Hls');
-
-        if (!isActive()) return;
-
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = hlsUrl;
           applySubtitleSelection(video, isBurnedInStream ? 'off' : initialSubtitle);
@@ -959,35 +972,117 @@ export default function WatchPage() {
           return;
         }
 
-        if (window.Hls && window.Hls.isSupported()) {
-          const hls = new window.Hls({
+        if (Hls.isSupported()) {
+          const hls = new Hls({
             enableWorker: false,
-            maxBufferLength: 30,
-            maxMaxBufferLength: 60,
+            maxBufferLength: 60,
+            maxMaxBufferLength: 120,
+            backBufferLength: 30,
             startLevel: -1,
             renderTextTracksNatively: true,
+            manifestLoadingMaxRetry: 4,
+            manifestLoadingRetryDelay: 1000,
+            levelLoadingMaxRetry: 4,
+            levelLoadingRetryDelay: 1000,
+            fragLoadingMaxRetry: 6,
+            fragLoadingRetryDelay: 1000,
+            fragLoadingMaxRetryTimeout: 16000,
           });
+          let fatalNetworkErrors = 0;
+          let stallRecoveryAttempts = 0;
+          let stallTimer = null;
+          let sourceReloadRequested = false;
+
+          const clearStallTimer = () => {
+            if (stallTimer) {
+              window.clearTimeout(stallTimer);
+              stallTimer = null;
+            }
+          };
+
+          const requestSourceReload = () => {
+            if (!isActive() || sourceReloadRequested) return;
+            sourceReloadRequested = true;
+
+            const currentTime = Number(video.currentTime);
+            if (Number.isFinite(currentTime) && currentTime > 0) {
+              playbackResumeTimeRef.current = currentTime;
+            }
+
+            if (automaticStreamReloadsRef.current >= MAX_AUTOMATIC_STREAM_RELOADS) {
+              setStreamError('Playback lost its connection. Retry to continue from the same place.');
+              teardownPlayer(video);
+              return;
+            }
+
+            automaticStreamReloadsRef.current += 1;
+            setStreamReloadKey(value => value + 1);
+          };
+
+          const scheduleStallRecovery = () => {
+            clearStallTimer();
+            if (video.paused || video.ended) return;
+
+            stallTimer = window.setTimeout(() => {
+              if (!isActive() || video.paused || video.ended || video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+                return;
+              }
+
+              stallRecoveryAttempts += 1;
+              if (stallRecoveryAttempts <= 2) {
+                hls.startLoad(Math.max(0, video.currentTime - 0.25));
+                scheduleStallRecovery();
+              } else {
+                requestSourceReload();
+              }
+            }, STALL_RECOVERY_DELAY_MS);
+          };
+
+          const handlePlaybackHealthy = () => {
+            clearStallTimer();
+            stallRecoveryAttempts = 0;
+          };
+
+          video.addEventListener('waiting', scheduleStallRecovery);
+          video.addEventListener('stalled', scheduleStallRecovery);
+          video.addEventListener('playing', handlePlaybackHealthy);
+          video.addEventListener('canplay', handlePlaybackHealthy);
+          removeVideoRecoveryListeners = () => {
+            clearStallTimer();
+            video.removeEventListener('loadedmetadata', restorePlaybackPosition);
+            video.removeEventListener('waiting', scheduleStallRecovery);
+            video.removeEventListener('stalled', scheduleStallRecovery);
+            video.removeEventListener('playing', handlePlaybackHealthy);
+            video.removeEventListener('canplay', handlePlaybackHealthy);
+          };
 
           hlsRef.current = hls;
 
-          hls.on(window.Hls.Events.MANIFEST_PARSED, (event, manifestData) => {
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
             if (!isActive()) return;
-
-            if (manifestData.levels && manifestData.levels.length > 0) {
-              hls.currentLevel = manifestData.levels.length - 1;
-            }
             video.play().catch(() => {});
           });
 
-          hls.on(window.Hls.Events.ERROR, (event, errorData) => {
+          hls.on(Hls.Events.FRAG_LOADED, () => {
+            fatalNetworkErrors = 0;
+          });
+
+          hls.on(Hls.Events.ERROR, (event, errorData) => {
             if (!isActive() || !errorData.fatal) return;
 
             console.error('HLS fatal error:', errorData);
             switch (errorData.type) {
-              case window.Hls.ErrorTypes.NETWORK_ERROR:
-                hls.startLoad();
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                fatalNetworkErrors += 1;
+                if (fatalNetworkErrors <= 2) {
+                  window.setTimeout(() => {
+                    if (isActive()) hls.startLoad(Math.max(0, video.currentTime - 0.25));
+                  }, fatalNetworkErrors * 1000);
+                } else {
+                  requestSourceReload();
+                }
                 break;
-              case window.Hls.ErrorTypes.MEDIA_ERROR:
+              case Hls.ErrorTypes.MEDIA_ERROR:
                 hls.recoverMediaError();
                 break;
               default:
@@ -1027,9 +1122,10 @@ export default function WatchPage() {
     return () => {
       active = false;
       abortController.abort();
+      removeVideoRecoveryListeners();
       teardownPlayer(ownedVideo);
     };
-  }, [currentEp, selectedAudioTrack, subtitleMode, burnedSubtitleKey, teardownPlayer, animeId]);
+  }, [currentEp, selectedAudioTrack, subtitleMode, burnedSubtitleKey, teardownPlayer, animeId, streamReloadKey]);
 
   useEffect(() => {
     const softSubtitle = subtitleMode === 'burned' ? 'off' : selectedSubtitle;
@@ -1186,8 +1282,11 @@ export default function WatchPage() {
               </svg>
               <p style={{ fontSize: '1.1rem', fontWeight: 500 }}>{streamError}</p>
               <p style={{ fontSize: '0.85rem', opacity: 0.7 }}>
-                Make sure Jellyfin is running and the episode has been scanned into the library.
+                The player will resume from the same place after reconnecting.
               </p>
+              <button type="button" className="btn btn-primary btn-sm" onClick={retryPlayback} disabled={streamLoading}>
+                {streamLoading ? 'Reconnecting...' : 'Retry playback'}
+              </button>
             </div>
           ) : (
             <>

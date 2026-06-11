@@ -126,6 +126,7 @@ async function proxyJellyfin(request, params, method = 'GET') {
       method,
       headers: buildUpstreamHeaders(request),
       cache: 'no-store',
+      signal: request.signal,
     });
 
     if (method === 'HEAD' || upstreamResponse.status === 204 || upstreamResponse.status === 304) {

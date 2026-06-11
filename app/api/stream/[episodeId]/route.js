@@ -3,6 +3,28 @@ import crypto from 'crypto';
 import { getProxiedJellyfinUrl, getStreamUrl, getDirectStreamUrl } from '../../../../lib/jellyfin';
 import { chooseAudioTrack, chooseSubtitle, requiresBurnedInSubtitle, resolveEpisodePlayback } from '../../../../lib/playback';
 
+const DEFAULT_PUBLIC_VIDEO_BITRATE = 6_000_000;
+const DEFAULT_PUBLIC_AUDIO_BITRATE = 192_000;
+
+function positiveIntegerFromEnv(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? Math.round(value) : fallback;
+}
+
+function streamDeliveryProfile(request) {
+  const cloudflare = request.headers.has('cf-ray') || request.headers.has('cf-connecting-ip');
+
+  if (!cloudflare) {
+    return { delivery: 'direct', videoBitrate: null, audioBitrate: null };
+  }
+
+  return {
+    delivery: 'cloudflare',
+    videoBitrate: positiveIntegerFromEnv('JELLYFIN_PUBLIC_VIDEO_BITRATE', DEFAULT_PUBLIC_VIDEO_BITRATE),
+    audioBitrate: positiveIntegerFromEnv('JELLYFIN_PUBLIC_AUDIO_BITRATE', DEFAULT_PUBLIC_AUDIO_BITRATE),
+  };
+}
+
 /**
  * GET /api/stream/[episodeId]
  *
@@ -33,6 +55,7 @@ export async function GET(request, { params }) {
     }
 
     const { episode, jellyfinItemId, mediaSourceId, audioTracks, subtitles } = playback;
+    const deliveryProfile = streamDeliveryProfile(request);
     const streamSessionId = crypto.randomUUID();
     const streamIdentity = `cultanime-${episode.id}-${streamSessionId}`;
     const audioTrack = chooseAudioTrack(audioTracks, requestedAudioIndex);
@@ -53,11 +76,15 @@ export async function GET(request, { params }) {
       subtitleMethod: 'Encode',
       subtitleStreamIndex: burnedInSubtitle.index,
       alwaysBurnInSubtitleWhenTranscoding: true,
+      videoBitrate: deliveryProfile.videoBitrate,
+      audioBitrate: deliveryProfile.audioBitrate,
     } : {
       mediaSourceId,
       deviceId: streamIdentity,
       playSessionId: streamSessionId,
       audioStreamIndex: audioTrack?.index,
+      videoBitrate: deliveryProfile.videoBitrate,
+      audioBitrate: deliveryProfile.audioBitrate,
     });
     const directUrl = burnedInSubtitle ? null : getDirectStreamUrl(jellyfinItemId, {
       mediaSourceId,
@@ -75,6 +102,8 @@ export async function GET(request, { params }) {
       streamSessionId,
       subtitleMode: burnedInSubtitle ? 'burned' : requestedSubtitleMode === 'off' ? 'off' : 'soft',
       burnedInSubtitleIndex: burnedInSubtitle?.index ?? null,
+      delivery: deliveryProfile.delivery,
+      videoBitrate: deliveryProfile.videoBitrate,
       type: 'hls',
     }, {
       headers: {
