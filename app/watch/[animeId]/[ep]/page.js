@@ -8,7 +8,11 @@ const SUBTITLE_PREF_KEY = 'cultanime.subtitleTrack';
 const AUDIO_PREF_KEY = 'cultanime.audioTrack';
 const NEXT_AIRING_HIDDEN_KEY = 'cultanime.nextAiringHidden';
 const STALL_RECOVERY_DELAY_MS = 12000;
-const MAX_AUTOMATIC_STREAM_RELOADS = 2;
+const PLAYBACK_WATCHDOG_INTERVAL_MS = 4000;
+const PLAYBACK_WATCHDOG_STUCK_MS = 18000;
+const PLAYBACK_RELOAD_RESET_MS = 60000;
+const USER_PLAYBACK_ACTION_GRACE_MS = 2000;
+const MAX_AUTOMATIC_STREAM_RELOADS = 4;
 
 function mediaPreferenceKey(baseKey, animeId) {
   return animeId ? `${baseKey}.${animeId}` : baseKey;
@@ -310,6 +314,45 @@ function installSubtitleTracks(video, subtitles, selectedSubtitle) {
   });
 
   applySubtitleSelection(video, selectedSubtitle);
+}
+
+function bufferedSecondsAhead(video) {
+  const currentTime = Number(video?.currentTime);
+  const buffered = video?.buffered;
+
+  if (!buffered || !Number.isFinite(currentTime)) return 0;
+
+  for (let index = 0; index < buffered.length; index += 1) {
+    const start = buffered.start(index);
+    const end = buffered.end(index);
+
+    if (currentTime >= start - 0.1 && currentTime <= end + 0.1) {
+      return Math.max(0, end - currentTime);
+    }
+  }
+
+  return 0;
+}
+
+function postPlayerEvent(payload) {
+  try {
+    const body = JSON.stringify(payload);
+
+    if (navigator.sendBeacon) {
+      const blob = new Blob([body], { type: 'application/json' });
+      navigator.sendBeacon('/api/player-events', blob);
+      return;
+    }
+
+    fetch('/api/player-events', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    // Playback logging must never interrupt playback.
+  }
 }
 
 function resetVideoElement(video) {
@@ -779,10 +822,41 @@ export default function WatchPage() {
     if (Number.isFinite(currentTime) && currentTime > 0) {
       playbackResumeTimeRef.current = currentTime;
     }
+    postPlayerEvent({
+      event: 'manual-retry',
+      animeId,
+      episodeId: currentEp?.id ?? null,
+      episodeNumber: currentEp?.episode_number ?? null,
+      currentTime,
+      bufferAhead: videoRef.current ? bufferedSecondsAhead(videoRef.current) : null,
+      readyState: videoRef.current?.readyState ?? null,
+      networkState: videoRef.current?.networkState ?? null,
+      paused: videoRef.current?.paused ?? null,
+      ended: videoRef.current?.ended ?? null,
+    });
     automaticStreamReloadsRef.current = 0;
     setStreamError(null);
     setStreamReloadKey(value => value + 1);
-  }, []);
+  }, [animeId, currentEp]);
+
+  const reportPlayerEvent = useCallback((event, details = {}) => {
+    const video = videoRef.current;
+
+    postPlayerEvent({
+      event,
+      animeId,
+      episodeId: currentEp?.id ?? null,
+      episodeNumber: currentEp?.episode_number ?? null,
+      currentTime: video?.currentTime ?? null,
+      duration: video?.duration ?? null,
+      bufferAhead: video ? bufferedSecondsAhead(video) : null,
+      readyState: video?.readyState ?? null,
+      networkState: video?.networkState ?? null,
+      paused: video?.paused ?? null,
+      ended: video?.ended ?? null,
+      ...details,
+    });
+  }, [animeId, currentEp]);
 
   // Load anime data
   useEffect(() => {
@@ -900,6 +974,10 @@ export default function WatchPage() {
         if (!isActive()) return;
 
         if (!res.ok) {
+          reportPlayerEvent('stream-request-failed', {
+            responseCode: res.status,
+            reason: data.error || 'Failed to load stream',
+          });
           setStreamError(data.error || 'Failed to load stream');
           return;
         }
@@ -924,6 +1002,13 @@ export default function WatchPage() {
         const hlsUrl = data.hlsUrl;
         const audioTrackOptions = Array.isArray(data.audioTracks) ? data.audioTracks : [];
         const subtitleTracks = Array.isArray(data.subtitles) ? data.subtitles : [];
+        const streamLogContext = {
+          streamSessionId: data.streamSessionId,
+          delivery: data.delivery,
+          videoBitrate: data.videoBitrate,
+          audioStreamIndex: data.audioStreamIndex,
+          subtitleMode: data.subtitleMode,
+        };
         const selectedAudioExists = selectedAudioTrack !== 'default'
           && audioTrackOptions.some(track => getAudioTrackId(track) === selectedAudioTrack);
         const initialAudioTrack = selectedAudioTrack === 'default'
@@ -942,6 +1027,14 @@ export default function WatchPage() {
             ? selectedSubtitle
             : chooseInitialSubtitle(subtitleTracks, animeId);
         const initialSubtitleTrack = getSubtitleById(subtitleTracks, initialSubtitle);
+
+        reportPlayerEvent('stream-ready', {
+          ...streamLogContext,
+          audioTrackCount: audioTrackOptions.length,
+          subtitleCount: subtitleTracks.length,
+          directAvailable: Boolean(data.directUrl),
+          burnedInSubtitleIndex: data.burnedInSubtitleIndex,
+        });
 
         setAudioTracks(audioTrackOptions);
         if (initialAudioTrack !== selectedAudioTrack) {
@@ -966,6 +1059,7 @@ export default function WatchPage() {
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = hlsUrl;
           applySubtitleSelection(video, isBurnedInStream ? 'off' : initialSubtitle);
+          reportPlayerEvent('native-hls-start', streamLogContext);
           if (isActive()) {
             video.play().catch(() => {});
           }
@@ -974,11 +1068,14 @@ export default function WatchPage() {
 
         if (Hls.isSupported()) {
           const hls = new Hls({
-            enableWorker: false,
+            enableWorker: true,
             maxBufferLength: 60,
             maxMaxBufferLength: 120,
             backBufferLength: 30,
             startLevel: -1,
+            detectStallWithCurrentTimeMs: 1000,
+            highBufferWatchdogPeriod: 1,
+            nudgeMaxRetry: 5,
             renderTextTracksNatively: true,
             manifestLoadingMaxRetry: 4,
             manifestLoadingRetryDelay: 1000,
@@ -988,10 +1085,18 @@ export default function WatchPage() {
             fragLoadingRetryDelay: 1000,
             fragLoadingMaxRetryTimeout: 16000,
           });
-          let fatalNetworkErrors = 0;
+          reportPlayerEvent('hls-created', streamLogContext);
+          let networkRecoveryAttempts = 0;
           let stallRecoveryAttempts = 0;
           let stallTimer = null;
+          let playbackWatchdogTimer = null;
+          let reloadBudgetResetTimer = null;
           let sourceReloadRequested = false;
+          let hasPlayed = false;
+          let userPaused = false;
+          let lastUserPlaybackActionAt = 0;
+          let lastObservedTime = Number(video.currentTime) || 0;
+          let lastPlaybackMovementAt = Date.now();
 
           const clearStallTimer = () => {
             if (stallTimer) {
@@ -1000,89 +1105,327 @@ export default function WatchPage() {
             }
           };
 
-          const requestSourceReload = () => {
-            if (!isActive() || sourceReloadRequested) return;
-            sourceReloadRequested = true;
+          const clearPlaybackWatchdog = () => {
+            if (playbackWatchdogTimer) {
+              window.clearInterval(playbackWatchdogTimer);
+              playbackWatchdogTimer = null;
+            }
+          };
 
+          const clearReloadBudgetResetTimer = () => {
+            if (reloadBudgetResetTimer) {
+              window.clearTimeout(reloadBudgetResetTimer);
+              reloadBudgetResetTimer = null;
+            }
+          };
+
+          const rememberPlaybackPosition = () => {
             const currentTime = Number(video.currentTime);
             if (Number.isFinite(currentTime) && currentTime > 0) {
               playbackResumeTimeRef.current = currentTime;
             }
+          };
+
+          const markPlaybackProgress = () => {
+            const currentTime = Number(video.currentTime);
+            if (!Number.isFinite(currentTime)) return;
+
+            lastObservedTime = currentTime;
+            lastPlaybackMovementAt = Date.now();
+          };
+
+          const scheduleReloadBudgetReset = () => {
+            clearReloadBudgetResetTimer();
+            reloadBudgetResetTimer = window.setTimeout(() => {
+              if (isActive()) {
+                automaticStreamReloadsRef.current = 0;
+              }
+            }, PLAYBACK_RELOAD_RESET_MS);
+          };
+
+          const requestSourceReload = (reason = 'unknown', extra = {}) => {
+            if (!isActive() || sourceReloadRequested) return;
+            sourceReloadRequested = true;
+
+            rememberPlaybackPosition();
 
             if (automaticStreamReloadsRef.current >= MAX_AUTOMATIC_STREAM_RELOADS) {
+              reportPlayerEvent('stream-reload-limit', {
+                ...streamLogContext,
+                reason,
+                reloadCount: automaticStreamReloadsRef.current,
+                ...extra,
+              });
               setStreamError('Playback lost its connection. Retry to continue from the same place.');
               teardownPlayer(video);
               return;
             }
 
             automaticStreamReloadsRef.current += 1;
+            reportPlayerEvent('stream-reload', {
+              ...streamLogContext,
+              reason,
+              reloadCount: automaticStreamReloadsRef.current,
+              ...extra,
+            });
+            setStreamLoading(true);
             setStreamReloadKey(value => value + 1);
           };
 
-          const scheduleStallRecovery = () => {
+          const scheduleStallRecovery = (trigger = 'stall') => {
             clearStallTimer();
-            if (video.paused || video.ended) return;
+            if (video.ended || userPaused) return;
 
             stallTimer = window.setTimeout(() => {
-              if (!isActive() || video.paused || video.ended || video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+              if (!isActive() || video.ended || userPaused) {
+                return;
+              }
+
+              if (!video.paused && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA && bufferedSecondsAhead(video) > 0.5) {
                 return;
               }
 
               stallRecoveryAttempts += 1;
+              reportPlayerEvent('stall-recovery', {
+                ...streamLogContext,
+                reason: trigger,
+                attempt: stallRecoveryAttempts,
+              });
               if (stallRecoveryAttempts <= 2) {
                 hls.startLoad(Math.max(0, video.currentTime - 0.25));
-                scheduleStallRecovery();
+                scheduleStallRecovery(trigger);
               } else {
-                requestSourceReload();
+                requestSourceReload('stall-timeout', { trigger, attempt: stallRecoveryAttempts });
               }
             }, STALL_RECOVERY_DELAY_MS);
           };
 
-          const handlePlaybackHealthy = () => {
+          const markUserPlaybackAction = () => {
+            lastUserPlaybackActionAt = Date.now();
+          };
+
+          const handleStallEvent = event => {
+            reportPlayerEvent('video-stall-event', {
+              ...streamLogContext,
+              reason: event.type,
+            });
+            scheduleStallRecovery(event.type);
+          };
+
+          const handleVideoPlay = () => {
+            userPaused = false;
+          };
+
+          const handleBufferHealthy = () => {
             clearStallTimer();
+            markPlaybackProgress();
+            scheduleReloadBudgetReset();
             stallRecoveryAttempts = 0;
           };
 
-          video.addEventListener('waiting', scheduleStallRecovery);
-          video.addEventListener('stalled', scheduleStallRecovery);
+          const handlePlaybackHealthy = () => {
+            hasPlayed = true;
+            userPaused = false;
+            handleBufferHealthy();
+          };
+
+          const handleTimeUpdate = () => {
+            markPlaybackProgress();
+          };
+
+          const handleVideoPause = () => {
+            if (!isActive() || video.ended) return;
+
+            clearStallTimer();
+
+            if (Date.now() - lastUserPlaybackActionAt <= USER_PLAYBACK_ACTION_GRACE_MS) {
+              userPaused = true;
+              reportPlayerEvent('video-paused-by-user', streamLogContext);
+              return;
+            }
+
+            if (!hasPlayed || document.hidden) return;
+
+            stallTimer = window.setTimeout(() => {
+              if (isActive() && video.paused && !video.ended && !userPaused && !document.hidden) {
+                reportPlayerEvent('unexpected-video-pause', streamLogContext);
+                requestSourceReload('unexpected-pause');
+              }
+            }, 3000);
+          };
+
+          const handleVideoError = () => {
+            if (!isActive() || video.ended) return;
+            reportPlayerEvent('media-error', {
+              ...streamLogContext,
+              mediaErrorCode: video.error?.code ?? null,
+              reason: video.error?.message || 'video-element-error',
+            });
+            requestSourceReload('media-error', {
+              mediaErrorCode: video.error?.code ?? null,
+            });
+          };
+
+          const checkPlaybackHealth = () => {
+            if (!isActive() || !hasPlayed || userPaused || video.ended || video.seeking || document.hidden) {
+              markPlaybackProgress();
+              return;
+            }
+
+            if (video.paused) return;
+
+            const currentTime = Number(video.currentTime);
+            if (!Number.isFinite(currentTime)) return;
+
+            if (Math.abs(currentTime - lastObservedTime) > 0.2) {
+              markPlaybackProgress();
+              return;
+            }
+
+            if (Date.now() - lastPlaybackMovementAt >= PLAYBACK_WATCHDOG_STUCK_MS) {
+              requestSourceReload('watchdog-stuck', {
+                stalledMs: Date.now() - lastPlaybackMovementAt,
+              });
+            }
+          };
+
+          playbackWatchdogTimer = window.setInterval(checkPlaybackHealth, PLAYBACK_WATCHDOG_INTERVAL_MS);
+
+          video.addEventListener('waiting', handleStallEvent);
+          video.addEventListener('stalled', handleStallEvent);
+          video.addEventListener('pointerdown', markUserPlaybackAction, true);
+          video.addEventListener('keydown', markUserPlaybackAction, true);
+          video.addEventListener('play', handleVideoPlay);
+          video.addEventListener('pause', handleVideoPause);
           video.addEventListener('playing', handlePlaybackHealthy);
-          video.addEventListener('canplay', handlePlaybackHealthy);
+          video.addEventListener('canplay', handleBufferHealthy);
+          video.addEventListener('timeupdate', handleTimeUpdate);
+          video.addEventListener('seeked', markPlaybackProgress);
+          video.addEventListener('error', handleVideoError);
           removeVideoRecoveryListeners = () => {
             clearStallTimer();
+            clearPlaybackWatchdog();
+            clearReloadBudgetResetTimer();
             video.removeEventListener('loadedmetadata', restorePlaybackPosition);
-            video.removeEventListener('waiting', scheduleStallRecovery);
-            video.removeEventListener('stalled', scheduleStallRecovery);
+            video.removeEventListener('waiting', handleStallEvent);
+            video.removeEventListener('stalled', handleStallEvent);
+            video.removeEventListener('pointerdown', markUserPlaybackAction, true);
+            video.removeEventListener('keydown', markUserPlaybackAction, true);
+            video.removeEventListener('play', handleVideoPlay);
+            video.removeEventListener('pause', handleVideoPause);
             video.removeEventListener('playing', handlePlaybackHealthy);
-            video.removeEventListener('canplay', handlePlaybackHealthy);
+            video.removeEventListener('canplay', handleBufferHealthy);
+            video.removeEventListener('timeupdate', handleTimeUpdate);
+            video.removeEventListener('seeked', markPlaybackProgress);
+            video.removeEventListener('error', handleVideoError);
           };
 
           hlsRef.current = hls;
 
+          hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+            if (!isActive()) return;
+            reportPlayerEvent('hls-media-attached', streamLogContext);
+          });
+
           hls.on(Hls.Events.MANIFEST_PARSED, (event, manifestData) => {
             if (!isActive()) return;
+            const hlsLevels = (manifestData.levels || []).map((level, index) => ({
+              index,
+              height: level.height,
+              bitrate: level.bitrate,
+            }));
             if (manifestData.levels && manifestData.levels.length > 0) {
-              hls.currentLevel = manifestData.levels.length - 1;
+              const highestLevel = manifestData.levels.length - 1;
+              hls.startLevel = highestLevel;
+              hls.nextAutoLevel = highestLevel;
             }
+            reportPlayerEvent('hls-manifest', {
+              ...streamLogContext,
+              hlsLevels,
+              hlsLevel: hls.currentLevel,
+              hlsAutoLevelEnabled: hls.autoLevelEnabled,
+            });
             video.play().catch(() => {});
           });
 
           hls.on(Hls.Events.FRAG_LOADED, () => {
-            fatalNetworkErrors = 0;
+            networkRecoveryAttempts = 0;
+            scheduleReloadBudgetReset();
           });
 
           hls.on(Hls.Events.ERROR, (event, errorData) => {
-            if (!isActive() || !errorData.fatal) return;
+            if (!isActive()) return;
+
+            const hlsErrorContext = {
+              ...streamLogContext,
+              hlsType: errorData.type,
+              hlsDetails: errorData.details,
+              hlsFatal: Boolean(errorData.fatal),
+              hlsLevel: errorData.level ?? errorData.frag?.level ?? hls.currentLevel,
+              hlsAutoLevelEnabled: hls.autoLevelEnabled,
+              responseCode: errorData.response?.code ?? null,
+            };
+            reportPlayerEvent(errorData.fatal ? 'hls-fatal-error' : 'hls-error', hlsErrorContext);
+
+            const recoverableNetworkError = [
+              Hls.ErrorDetails.FRAG_LOAD_ERROR,
+              Hls.ErrorDetails.FRAG_LOAD_TIMEOUT,
+              Hls.ErrorDetails.LEVEL_LOAD_ERROR,
+              Hls.ErrorDetails.LEVEL_LOAD_TIMEOUT,
+              Hls.ErrorDetails.KEY_LOAD_ERROR,
+              Hls.ErrorDetails.KEY_LOAD_TIMEOUT,
+              Hls.ErrorDetails.AUDIO_TRACK_LOAD_ERROR,
+              Hls.ErrorDetails.AUDIO_TRACK_LOAD_TIMEOUT,
+              Hls.ErrorDetails.SUBTITLE_LOAD_ERROR,
+              Hls.ErrorDetails.SUBTITLE_TRACK_LOAD_TIMEOUT,
+            ].includes(errorData.details);
+            const recoverableStallError = [
+              Hls.ErrorDetails.BUFFER_STALLED_ERROR,
+              Hls.ErrorDetails.BUFFER_NUDGE_ON_STALL,
+              Hls.ErrorDetails.BUFFER_SEEK_OVER_HOLE,
+            ].includes(errorData.details);
+            const recoverableMediaError = [
+              Hls.ErrorDetails.BUFFER_APPEND_ERROR,
+              Hls.ErrorDetails.BUFFER_APPENDING_ERROR,
+              Hls.ErrorDetails.BUFFER_FULL_ERROR,
+              Hls.ErrorDetails.FRAG_PARSING_ERROR,
+            ].includes(errorData.details);
+
+            if (!errorData.fatal) {
+              if (recoverableStallError) {
+                scheduleStallRecovery();
+                return;
+              }
+
+              if (recoverableNetworkError) {
+                networkRecoveryAttempts += 1;
+                if (networkRecoveryAttempts <= 3) {
+                  window.setTimeout(() => {
+                    if (isActive()) hls.startLoad(Math.max(0, video.currentTime - 0.25));
+                  }, networkRecoveryAttempts * 1000);
+                } else {
+                  requestSourceReload('hls-network-error', hlsErrorContext);
+                }
+                return;
+              }
+
+              if (recoverableMediaError) {
+                hls.recoverMediaError();
+                scheduleStallRecovery();
+              }
+              return;
+            }
 
             console.error('HLS fatal error:', errorData);
             switch (errorData.type) {
               case Hls.ErrorTypes.NETWORK_ERROR:
-                fatalNetworkErrors += 1;
-                if (fatalNetworkErrors <= 2) {
+                networkRecoveryAttempts += 1;
+                if (networkRecoveryAttempts <= 2) {
                   window.setTimeout(() => {
                     if (isActive()) hls.startLoad(Math.max(0, video.currentTime - 0.25));
-                  }, fatalNetworkErrors * 1000);
+                  }, networkRecoveryAttempts * 1000);
                 } else {
-                  requestSourceReload();
+                  requestSourceReload('hls-fatal-network-error', hlsErrorContext);
                 }
                 break;
               case Hls.ErrorTypes.MEDIA_ERROR:
@@ -1095,16 +1438,23 @@ export default function WatchPage() {
             }
           });
 
+          reportPlayerEvent('hls-load-source', streamLogContext);
           hls.loadSource(hlsUrl);
           hls.attachMedia(video);
           applySubtitleSelection(video, isBurnedInStream ? 'off' : initialSubtitle);
         } else if (data.directUrl) {
           video.src = data.directUrl;
           applySubtitleSelection(video, isBurnedInStream ? 'off' : initialSubtitle);
+          reportPlayerEvent('direct-video-start', streamLogContext);
           if (isActive()) {
             video.play().catch(() => {});
           }
         } else {
+          reportPlayerEvent('stream-unsupported', {
+            streamSessionId: data.streamSessionId,
+            delivery: data.delivery,
+            subtitleMode: data.subtitleMode,
+          });
           setStreamError('This browser cannot play the selected stream.');
         }
       } catch (err) {
@@ -1112,6 +1462,9 @@ export default function WatchPage() {
         if (!isActive()) return;
 
         console.error('Stream init error:', err);
+        reportPlayerEvent('stream-init-error', {
+          reason: err.message || 'stream-init-error',
+        });
         setStreamError('Failed to connect to streaming server.');
       } finally {
         if (isActive()) {
@@ -1128,7 +1481,7 @@ export default function WatchPage() {
       removeVideoRecoveryListeners();
       teardownPlayer(ownedVideo);
     };
-  }, [currentEp, selectedAudioTrack, subtitleMode, burnedSubtitleKey, teardownPlayer, animeId, streamReloadKey]);
+  }, [currentEp, selectedAudioTrack, subtitleMode, burnedSubtitleKey, teardownPlayer, animeId, streamReloadKey, reportPlayerEvent]);
 
   useEffect(() => {
     const softSubtitle = subtitleMode === 'burned' ? 'off' : selectedSubtitle;

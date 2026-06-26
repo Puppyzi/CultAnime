@@ -129,6 +129,16 @@ async function proxyJellyfin(request, params, method = 'GET') {
       signal: request.signal,
     });
 
+    if (!upstreamResponse.ok) {
+      console.warn('[jellyfin-proxy:upstream-failed]', JSON.stringify({
+        method,
+        status: upstreamResponse.status,
+        statusText: upstreamResponse.statusText,
+        path: relativePathname,
+        contentType: upstreamResponse.headers.get('content-type') || null,
+      }));
+    }
+
     if (method === 'HEAD' || upstreamResponse.status === 204 || upstreamResponse.status === 304) {
       return new NextResponse(null, {
         status: upstreamResponse.status,

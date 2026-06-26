@@ -88,6 +88,21 @@ export async function GET(request, { params }) {
       audioStreamIndex: audioTrack?.index,
     });
 
+    console.info('[stream:start]', JSON.stringify({
+      episodeId: episode.id,
+      animeId: episode.anime_id,
+      jellyfinItemId,
+      streamSessionId,
+      delivery: deliveryProfile.delivery,
+      videoBitrate: deliveryProfile.videoBitrate,
+      audioBitrate: deliveryProfile.audioBitrate,
+      audioStreamIndex: audioTrack?.index ?? null,
+      subtitleMode: burnedInSubtitle ? 'burned' : requestedSubtitleMode === 'off' ? 'off' : 'soft',
+      burnedInSubtitleIndex: burnedInSubtitle?.index ?? null,
+      audioTrackCount: audioTracks.length,
+      subtitleCount: subtitles.length,
+    }));
+
     return NextResponse.json({
       episodeId: episode.id,
       jellyfinItemId,
