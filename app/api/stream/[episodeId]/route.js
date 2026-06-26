@@ -3,12 +3,9 @@ import crypto from 'crypto';
 import { getProxiedJellyfinUrl, getStreamUrl, getDirectStreamUrl } from '../../../../lib/jellyfin';
 import { chooseAudioTrack, chooseSubtitle, requiresBurnedInSubtitle, resolveEpisodePlayback } from '../../../../lib/playback';
 
-const DEFAULT_PUBLIC_VIDEO_BITRATE = 6_000_000;
-const DEFAULT_PUBLIC_AUDIO_BITRATE = 192_000;
-
-function positiveIntegerFromEnv(name, fallback) {
+function positiveIntegerFromEnv(name) {
   const value = Number(process.env[name]);
-  return Number.isFinite(value) && value > 0 ? Math.round(value) : fallback;
+  return Number.isFinite(value) && value > 0 ? Math.round(value) : null;
 }
 
 function streamDeliveryProfile(request) {
@@ -20,8 +17,8 @@ function streamDeliveryProfile(request) {
 
   return {
     delivery: 'cloudflare',
-    videoBitrate: positiveIntegerFromEnv('JELLYFIN_PUBLIC_VIDEO_BITRATE', DEFAULT_PUBLIC_VIDEO_BITRATE),
-    audioBitrate: positiveIntegerFromEnv('JELLYFIN_PUBLIC_AUDIO_BITRATE', DEFAULT_PUBLIC_AUDIO_BITRATE),
+    videoBitrate: positiveIntegerFromEnv('JELLYFIN_PUBLIC_VIDEO_BITRATE'),
+    audioBitrate: positiveIntegerFromEnv('JELLYFIN_PUBLIC_AUDIO_BITRATE'),
   };
 }
 

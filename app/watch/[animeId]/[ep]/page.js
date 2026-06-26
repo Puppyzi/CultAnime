@@ -1058,8 +1058,11 @@ export default function WatchPage() {
 
           hlsRef.current = hls;
 
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          hls.on(Hls.Events.MANIFEST_PARSED, (event, manifestData) => {
             if (!isActive()) return;
+            if (manifestData.levels && manifestData.levels.length > 0) {
+              hls.currentLevel = manifestData.levels.length - 1;
+            }
             video.play().catch(() => {});
           });
 
