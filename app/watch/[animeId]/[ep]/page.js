@@ -1068,7 +1068,7 @@ export default function WatchPage() {
 
         if (Hls.isSupported()) {
           const hls = new Hls({
-            enableWorker: true,
+            enableWorker: false,
             maxBufferLength: 60,
             maxMaxBufferLength: 120,
             backBufferLength: 30,
@@ -1334,11 +1334,6 @@ export default function WatchPage() {
               height: level.height,
               bitrate: level.bitrate,
             }));
-            if (manifestData.levels && manifestData.levels.length > 0) {
-              const highestLevel = manifestData.levels.length - 1;
-              hls.startLevel = highestLevel;
-              hls.nextAutoLevel = highestLevel;
-            }
             reportPlayerEvent('hls-manifest', {
               ...streamLogContext,
               hlsLevels,
