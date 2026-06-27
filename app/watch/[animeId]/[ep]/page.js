@@ -1127,6 +1127,7 @@ export default function WatchPage() {
           let nativeWatchdogTimer = null;
           let nativeReloadBudgetResetTimer = null;
           let nativeSourceReloadRequested = false;
+          let nativeDeferredReloadRequest = null;
           let nativeStallRecoveryAttempts = 0;
           let nativeHasPlayed = false;
           let nativeUserPaused = false;
@@ -1181,9 +1182,24 @@ export default function WatchPage() {
 
           const requestNativeSourceReload = (reason = 'unknown', extra = {}) => {
             if (!isActive() || nativeSourceReloadRequested) return;
-            nativeSourceReloadRequested = true;
 
             rememberNativePlaybackPosition();
+
+            if (document.hidden) {
+              if (!nativeDeferredReloadRequest) {
+                reportPlayerEvent('stream-reload-deferred', {
+                  ...streamLogContext,
+                  reason,
+                  player: 'native-hls',
+                  ...extra,
+                });
+              }
+              nativeDeferredReloadRequest = { reason, extra };
+              clearNativeStallTimer();
+              return;
+            }
+
+            nativeSourceReloadRequested = true;
 
             if (automaticStreamReloadsRef.current >= MAX_AUTOMATIC_STREAM_RELOADS) {
               reportPlayerEvent('stream-reload-limit', {
@@ -1212,10 +1228,10 @@ export default function WatchPage() {
 
           const scheduleNativeStallRecovery = (trigger = 'stall') => {
             clearNativeStallTimer();
-            if (video.ended || nativeUserPaused) return;
+            if (video.ended || video.paused || nativeUserPaused || document.hidden) return;
 
             nativeStallTimer = window.setTimeout(() => {
-              if (!isActive() || video.ended || nativeUserPaused) {
+              if (!isActive() || video.ended || video.paused || nativeUserPaused || document.hidden) {
                 return;
               }
 
@@ -1239,6 +1255,11 @@ export default function WatchPage() {
           };
 
           const handleNativeStallEvent = event => {
+            if (video.paused || document.hidden) {
+              clearNativeStallTimer();
+              return;
+            }
+
             if (
               !video.paused
               && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA
@@ -1253,6 +1274,25 @@ export default function WatchPage() {
               player: 'native-hls',
             });
             scheduleNativeStallRecovery(event.type);
+          };
+
+          const handleNativeVisibilityChange = () => {
+            if (document.hidden) {
+              clearNativeStallTimer();
+              rememberNativePlaybackPosition();
+              return;
+            }
+
+            markNativePlaybackProgress();
+
+            if (nativeDeferredReloadRequest) {
+              const pendingReload = nativeDeferredReloadRequest;
+              nativeDeferredReloadRequest = null;
+              requestNativeSourceReload(pendingReload.reason, {
+                ...pendingReload.extra,
+                trigger: pendingReload.extra?.trigger || 'visibilitychange',
+              });
+            }
           };
 
           const handleNativeVideoPlay = () => {
@@ -1355,6 +1395,7 @@ export default function WatchPage() {
           video.addEventListener('timeupdate', markNativePlaybackProgress);
           video.addEventListener('seeked', markNativePlaybackProgress);
           video.addEventListener('error', handleNativeVideoError);
+          document.addEventListener('visibilitychange', handleNativeVisibilityChange);
           removeVideoRecoveryListeners = () => {
             clearNativeStallTimer();
             clearNativeWatchdog();
@@ -1371,6 +1412,7 @@ export default function WatchPage() {
             video.removeEventListener('timeupdate', markNativePlaybackProgress);
             video.removeEventListener('seeked', markNativePlaybackProgress);
             video.removeEventListener('error', handleNativeVideoError);
+            document.removeEventListener('visibilitychange', handleNativeVisibilityChange);
           };
 
           video.src = hlsUrl;
@@ -1411,6 +1453,7 @@ export default function WatchPage() {
           let playbackWatchdogTimer = null;
           let reloadBudgetResetTimer = null;
           let sourceReloadRequested = false;
+          let deferredReloadRequest = null;
           let hasPlayed = false;
           let userPaused = false;
           let lastUserPlaybackActionAt = 0;
@@ -1464,9 +1507,23 @@ export default function WatchPage() {
 
           const requestSourceReload = (reason = 'unknown', extra = {}) => {
             if (!isActive() || sourceReloadRequested) return;
-            sourceReloadRequested = true;
 
             rememberPlaybackPosition();
+
+            if (document.hidden) {
+              if (!deferredReloadRequest) {
+                reportPlayerEvent('stream-reload-deferred', {
+                  ...streamLogContext,
+                  reason,
+                  ...extra,
+                });
+              }
+              deferredReloadRequest = { reason, extra };
+              clearStallTimer();
+              return;
+            }
+
+            sourceReloadRequested = true;
 
             if (automaticStreamReloadsRef.current >= MAX_AUTOMATIC_STREAM_RELOADS) {
               reportPlayerEvent('stream-reload-limit', {
@@ -1493,10 +1550,10 @@ export default function WatchPage() {
 
           const scheduleStallRecovery = (trigger = 'stall') => {
             clearStallTimer();
-            if (video.ended || userPaused) return;
+            if (video.ended || video.paused || userPaused || document.hidden) return;
 
             stallTimer = window.setTimeout(() => {
-              if (!isActive() || video.ended || userPaused) {
+              if (!isActive() || video.ended || video.paused || userPaused || document.hidden) {
                 return;
               }
 
@@ -1524,6 +1581,11 @@ export default function WatchPage() {
           };
 
           const handleStallEvent = event => {
+            if (video.paused || document.hidden) {
+              clearStallTimer();
+              return;
+            }
+
             if (
               !video.paused
               && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA
@@ -1558,6 +1620,25 @@ export default function WatchPage() {
 
           const handleTimeUpdate = () => {
             markPlaybackProgress();
+          };
+
+          const handleVisibilityChange = () => {
+            if (document.hidden) {
+              clearStallTimer();
+              rememberPlaybackPosition();
+              return;
+            }
+
+            markPlaybackProgress();
+
+            if (deferredReloadRequest) {
+              const pendingReload = deferredReloadRequest;
+              deferredReloadRequest = null;
+              requestSourceReload(pendingReload.reason, {
+                ...pendingReload.extra,
+                trigger: pendingReload.extra?.trigger || 'visibilitychange',
+              });
+            }
           };
 
           const handleVideoPause = () => {
@@ -1636,6 +1717,7 @@ export default function WatchPage() {
           video.addEventListener('timeupdate', handleTimeUpdate);
           video.addEventListener('seeked', markPlaybackProgress);
           video.addEventListener('error', handleVideoError);
+          document.addEventListener('visibilitychange', handleVisibilityChange);
           removeVideoRecoveryListeners = () => {
             clearStallTimer();
             clearPlaybackWatchdog();
@@ -1652,6 +1734,7 @@ export default function WatchPage() {
             video.removeEventListener('timeupdate', handleTimeUpdate);
             video.removeEventListener('seeked', markPlaybackProgress);
             video.removeEventListener('error', handleVideoError);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
           };
 
           hlsRef.current = hls;
