@@ -38,6 +38,7 @@ function cleanPayload(payload, request) {
     animeId: cleanText(payload?.animeId, 40),
     episodeId: cleanText(payload?.episodeId, 40),
     episodeNumber: cleanNumber(payload?.episodeNumber),
+    player: cleanText(payload?.player, 40),
     streamSessionId: cleanText(payload?.streamSessionId, 120),
     delivery: cleanText(payload?.delivery, 40),
     reason: cleanText(payload?.reason, 80),

@@ -1058,9 +1058,254 @@ export default function WatchPage() {
         }
 
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          let nativeStallTimer = null;
+          let nativeWatchdogTimer = null;
+          let nativeReloadBudgetResetTimer = null;
+          let nativeSourceReloadRequested = false;
+          let nativeStallRecoveryAttempts = 0;
+          let nativeHasPlayed = false;
+          let nativeUserPaused = false;
+          let nativeLastUserPlaybackActionAt = 0;
+          let nativeLastObservedTime = Number(video.currentTime) || 0;
+          let nativeLastPlaybackMovementAt = Date.now();
+
+          const clearNativeStallTimer = () => {
+            if (nativeStallTimer) {
+              window.clearTimeout(nativeStallTimer);
+              nativeStallTimer = null;
+            }
+          };
+
+          const clearNativeWatchdog = () => {
+            if (nativeWatchdogTimer) {
+              window.clearInterval(nativeWatchdogTimer);
+              nativeWatchdogTimer = null;
+            }
+          };
+
+          const clearNativeReloadBudgetResetTimer = () => {
+            if (nativeReloadBudgetResetTimer) {
+              window.clearTimeout(nativeReloadBudgetResetTimer);
+              nativeReloadBudgetResetTimer = null;
+            }
+          };
+
+          const rememberNativePlaybackPosition = () => {
+            const currentTime = Number(video.currentTime);
+            if (Number.isFinite(currentTime) && currentTime > 0) {
+              playbackResumeTimeRef.current = currentTime;
+            }
+          };
+
+          const markNativePlaybackProgress = () => {
+            const currentTime = Number(video.currentTime);
+            if (!Number.isFinite(currentTime)) return;
+
+            nativeLastObservedTime = currentTime;
+            nativeLastPlaybackMovementAt = Date.now();
+          };
+
+          const scheduleNativeReloadBudgetReset = () => {
+            clearNativeReloadBudgetResetTimer();
+            nativeReloadBudgetResetTimer = window.setTimeout(() => {
+              if (isActive()) {
+                automaticStreamReloadsRef.current = 0;
+              }
+            }, PLAYBACK_RELOAD_RESET_MS);
+          };
+
+          const requestNativeSourceReload = (reason = 'unknown', extra = {}) => {
+            if (!isActive() || nativeSourceReloadRequested) return;
+            nativeSourceReloadRequested = true;
+
+            rememberNativePlaybackPosition();
+
+            if (automaticStreamReloadsRef.current >= MAX_AUTOMATIC_STREAM_RELOADS) {
+              reportPlayerEvent('stream-reload-limit', {
+                ...streamLogContext,
+                reason,
+                reloadCount: automaticStreamReloadsRef.current,
+                player: 'native-hls',
+                ...extra,
+              });
+              setStreamError('Playback lost its connection. Retry to continue from the same place.');
+              teardownPlayer(video);
+              return;
+            }
+
+            automaticStreamReloadsRef.current += 1;
+            reportPlayerEvent('stream-reload', {
+              ...streamLogContext,
+              reason,
+              reloadCount: automaticStreamReloadsRef.current,
+              player: 'native-hls',
+              ...extra,
+            });
+            setStreamLoading(true);
+            setStreamReloadKey(value => value + 1);
+          };
+
+          const scheduleNativeStallRecovery = (trigger = 'stall') => {
+            clearNativeStallTimer();
+            if (video.ended || nativeUserPaused) return;
+
+            nativeStallTimer = window.setTimeout(() => {
+              if (!isActive() || video.ended || nativeUserPaused) {
+                return;
+              }
+
+              if (!video.paused && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA && bufferedSecondsAhead(video) > 0.5) {
+                return;
+              }
+
+              nativeStallRecoveryAttempts += 1;
+              reportPlayerEvent('stall-recovery', {
+                ...streamLogContext,
+                reason: trigger,
+                attempt: nativeStallRecoveryAttempts,
+                player: 'native-hls',
+              });
+              requestNativeSourceReload('native-stall-timeout', { trigger, attempt: nativeStallRecoveryAttempts });
+            }, STALL_RECOVERY_DELAY_MS);
+          };
+
+          const markNativeUserPlaybackAction = () => {
+            nativeLastUserPlaybackActionAt = Date.now();
+          };
+
+          const handleNativeStallEvent = event => {
+            reportPlayerEvent('video-stall-event', {
+              ...streamLogContext,
+              reason: event.type,
+              player: 'native-hls',
+            });
+            scheduleNativeStallRecovery(event.type);
+          };
+
+          const handleNativeVideoPlay = () => {
+            nativeUserPaused = false;
+          };
+
+          const handleNativeBufferHealthy = () => {
+            clearNativeStallTimer();
+            markNativePlaybackProgress();
+            scheduleNativeReloadBudgetReset();
+            nativeStallRecoveryAttempts = 0;
+          };
+
+          const handleNativePlaybackHealthy = () => {
+            nativeHasPlayed = true;
+            nativeUserPaused = false;
+            handleNativeBufferHealthy();
+          };
+
+          const handleNativeVideoPause = () => {
+            if (!isActive() || video.ended) return;
+
+            clearNativeStallTimer();
+
+            if (Date.now() - nativeLastUserPlaybackActionAt <= USER_PLAYBACK_ACTION_GRACE_MS) {
+              nativeUserPaused = true;
+              reportPlayerEvent('video-paused-by-user', {
+                ...streamLogContext,
+                player: 'native-hls',
+              });
+              return;
+            }
+
+            if (!nativeHasPlayed || document.hidden) return;
+
+            nativeStallTimer = window.setTimeout(() => {
+              if (isActive() && video.paused && !video.ended && !nativeUserPaused && !document.hidden) {
+                reportPlayerEvent('unexpected-video-pause', {
+                  ...streamLogContext,
+                  player: 'native-hls',
+                });
+                requestNativeSourceReload('native-unexpected-pause');
+              }
+            }, 3000);
+          };
+
+          const handleNativeVideoError = () => {
+            if (!isActive() || video.ended) return;
+            reportPlayerEvent('media-error', {
+              ...streamLogContext,
+              mediaErrorCode: video.error?.code ?? null,
+              reason: video.error?.message || 'native-video-element-error',
+              player: 'native-hls',
+            });
+            requestNativeSourceReload('native-media-error', {
+              mediaErrorCode: video.error?.code ?? null,
+            });
+          };
+
+          const checkNativePlaybackHealth = () => {
+            if (!isActive() || !nativeHasPlayed || nativeUserPaused || video.ended || video.seeking || document.hidden) {
+              markNativePlaybackProgress();
+              return;
+            }
+
+            if (video.paused) {
+              if (Date.now() - nativeLastPlaybackMovementAt >= PLAYBACK_WATCHDOG_PAUSED_MS) {
+                requestNativeSourceReload('native-watchdog-paused', {
+                  stalledMs: Date.now() - nativeLastPlaybackMovementAt,
+                });
+              }
+              return;
+            }
+
+            const currentTime = Number(video.currentTime);
+            if (!Number.isFinite(currentTime)) return;
+
+            if (Math.abs(currentTime - nativeLastObservedTime) > 0.2) {
+              markNativePlaybackProgress();
+              return;
+            }
+
+            if (Date.now() - nativeLastPlaybackMovementAt >= PLAYBACK_WATCHDOG_STUCK_MS) {
+              requestNativeSourceReload('native-watchdog-stuck', {
+                stalledMs: Date.now() - nativeLastPlaybackMovementAt,
+              });
+            }
+          };
+
+          nativeWatchdogTimer = window.setInterval(checkNativePlaybackHealth, PLAYBACK_WATCHDOG_INTERVAL_MS);
+
+          video.addEventListener('waiting', handleNativeStallEvent);
+          video.addEventListener('stalled', handleNativeStallEvent);
+          video.addEventListener('pointerdown', markNativeUserPlaybackAction, true);
+          video.addEventListener('keydown', markNativeUserPlaybackAction, true);
+          video.addEventListener('play', handleNativeVideoPlay);
+          video.addEventListener('pause', handleNativeVideoPause);
+          video.addEventListener('playing', handleNativePlaybackHealthy);
+          video.addEventListener('canplay', handleNativeBufferHealthy);
+          video.addEventListener('timeupdate', markNativePlaybackProgress);
+          video.addEventListener('seeked', markNativePlaybackProgress);
+          video.addEventListener('error', handleNativeVideoError);
+          removeVideoRecoveryListeners = () => {
+            clearNativeStallTimer();
+            clearNativeWatchdog();
+            clearNativeReloadBudgetResetTimer();
+            video.removeEventListener('loadedmetadata', restorePlaybackPosition);
+            video.removeEventListener('waiting', handleNativeStallEvent);
+            video.removeEventListener('stalled', handleNativeStallEvent);
+            video.removeEventListener('pointerdown', markNativeUserPlaybackAction, true);
+            video.removeEventListener('keydown', markNativeUserPlaybackAction, true);
+            video.removeEventListener('play', handleNativeVideoPlay);
+            video.removeEventListener('pause', handleNativeVideoPause);
+            video.removeEventListener('playing', handleNativePlaybackHealthy);
+            video.removeEventListener('canplay', handleNativeBufferHealthy);
+            video.removeEventListener('timeupdate', markNativePlaybackProgress);
+            video.removeEventListener('seeked', markNativePlaybackProgress);
+            video.removeEventListener('error', handleNativeVideoError);
+          };
+
           video.src = hlsUrl;
           applySubtitleSelection(video, isBurnedInStream ? 'off' : initialSubtitle);
-          reportPlayerEvent('native-hls-start', streamLogContext);
+          reportPlayerEvent('native-hls-start', {
+            ...streamLogContext,
+            player: 'native-hls',
+          });
           if (isActive()) {
             video.play().catch(() => {});
           }
