@@ -9,6 +9,7 @@ const AUDIO_PREF_KEY = 'cultanime.audioTrack';
 const NEXT_AIRING_HIDDEN_KEY = 'cultanime.nextAiringHidden';
 const STALL_RECOVERY_DELAY_MS = 12000;
 const PLAYBACK_WATCHDOG_INTERVAL_MS = 4000;
+const PLAYBACK_WATCHDOG_PAUSED_MS = 8000;
 const PLAYBACK_WATCHDOG_STUCK_MS = 18000;
 const PLAYBACK_RELOAD_RESET_MS = 60000;
 const USER_PLAYBACK_ACTION_GRACE_MS = 2000;
@@ -1272,7 +1273,14 @@ export default function WatchPage() {
               return;
             }
 
-            if (video.paused) return;
+            if (video.paused) {
+              if (Date.now() - lastPlaybackMovementAt >= PLAYBACK_WATCHDOG_PAUSED_MS) {
+                requestSourceReload('watchdog-paused', {
+                  stalledMs: Date.now() - lastPlaybackMovementAt,
+                });
+              }
+              return;
+            }
 
             const currentTime = Number(video.currentTime);
             if (!Number.isFinite(currentTime)) return;

@@ -10,7 +10,7 @@ const emptyEpisodeEditForm = {
   runtime_minutes: '',
   overview: '',
 };
-const APP_VERSION = '2.3.3';
+const APP_VERSION = '2.3.4';
 
 function formatEpisodeDate(value) {
   if (!value) return 'No date';
@@ -186,9 +186,11 @@ export default function AdminPage() {
     const data = await res.json();
     if (data.success) {
       showToast('Anime added successfully!');
-      setForm({ title: '', title_romaji: '', title_english: '', description: '',
+      setForm({
+        title: '', title_romaji: '', title_english: '', description: '',
         cover_image: '', banner_image: '', genres: '', status: '',
-        episodes_total: '', rating: '', year: '', season: '', format: '', anilist_id: '' });
+        episodes_total: '', rating: '', year: '', season: '', format: '', anilist_id: ''
+      });
       loadAnimeList();
     } else {
       showToast(data.error || 'Error adding anime', 'error');
@@ -878,19 +880,19 @@ export default function AdminPage() {
                     {selectedAnime.episodes.map(ep => (
                       <div key={ep.id} className="admin-episode-editor">
                         <div className="episode-item">
-                        <span className="episode-number">{ep.episode_number}</span>
-                        <span className="episode-title">{ep.title || `Episode ${ep.episode_number}`}</span>
-                        <span className="episode-admin-path">
-                          {ep.file_path}
-                        </span>
-                        <span className="episode-admin-meta">
-                          {formatEpisodeDate(ep.air_date)} | {formatEpisodeRuntime(ep.duration)}
-                        </span>
-                        {Boolean(ep.manual_metadata) && <span className="episode-admin-badge">Manual</span>}
-                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => startEditEpisode(ep)}>
-                          {editingEpisodeId === ep.id ? 'Editing' : 'Edit'}
-                        </button>
-                        <button type="button" className="btn btn-sm" style={{ color: '#ef4444' }} onClick={() => deleteEpisode(ep.id)}>✕</button>
+                          <span className="episode-number">{ep.episode_number}</span>
+                          <span className="episode-title">{ep.title || `Episode ${ep.episode_number}`}</span>
+                          <span className="episode-admin-path">
+                            {ep.file_path}
+                          </span>
+                          <span className="episode-admin-meta">
+                            {formatEpisodeDate(ep.air_date)} | {formatEpisodeRuntime(ep.duration)}
+                          </span>
+                          {Boolean(ep.manual_metadata) && <span className="episode-admin-badge">Manual</span>}
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => startEditEpisode(ep)}>
+                            {editingEpisodeId === ep.id ? 'Editing' : 'Edit'}
+                          </button>
+                          <button type="button" className="btn btn-sm" style={{ color: '#ef4444' }} onClick={() => deleteEpisode(ep.id)}>✕</button>
                         </div>
 
                         {editingEpisodeId === ep.id && (
