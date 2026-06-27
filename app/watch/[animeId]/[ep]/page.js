@@ -14,6 +14,8 @@ const PLAYBACK_WATCHDOG_STUCK_MS = 18000;
 const PLAYBACK_RELOAD_RESET_MS = 60000;
 const USER_PLAYBACK_ACTION_GRACE_MS = 2000;
 const MAX_AUTOMATIC_STREAM_RELOADS = 4;
+const PENDING_PLAYER_EVENTS_KEY = 'cultanime.pendingPlayerEvents';
+const MAX_PENDING_PLAYER_EVENTS = 20;
 
 function mediaPreferenceKey(baseKey, animeId) {
   return animeId ? `${baseKey}.${animeId}` : baseKey;
@@ -341,8 +343,9 @@ function postPlayerEvent(payload) {
 
     if (navigator.sendBeacon) {
       const blob = new Blob([body], { type: 'application/json' });
-      navigator.sendBeacon('/api/player-events', blob);
-      return;
+      if (navigator.sendBeacon('/api/player-events', blob)) {
+        return;
+      }
     }
 
     fetch('/api/player-events', {
@@ -353,6 +356,51 @@ function postPlayerEvent(payload) {
     }).catch(() => {});
   } catch {
     // Playback logging must never interrupt playback.
+  }
+}
+
+function queuePlayerEvent(payload) {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+
+    const saved = window.localStorage.getItem(PENDING_PLAYER_EVENTS_KEY);
+    const parsed = saved ? JSON.parse(saved) : [];
+    const pending = Array.isArray(parsed) ? parsed : [];
+
+    pending.push({
+      ...payload,
+      queuedAt: new Date().toISOString(),
+    });
+
+    window.localStorage.setItem(
+      PENDING_PLAYER_EVENTS_KEY,
+      JSON.stringify(pending.slice(-MAX_PENDING_PLAYER_EVENTS))
+    );
+  } catch {
+    // Cached diagnostics must never affect playback.
+  }
+}
+
+function flushQueuedPlayerEvents() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+
+    const saved = window.localStorage.getItem(PENDING_PLAYER_EVENTS_KEY);
+    if (!saved) return;
+
+    const pending = JSON.parse(saved);
+    window.localStorage.removeItem(PENDING_PLAYER_EVENTS_KEY);
+
+    if (!Array.isArray(pending)) return;
+
+    pending.forEach(event => {
+      postPlayerEvent({
+        ...event,
+        replayed: true,
+      });
+    });
+  } catch {
+    // Best-effort diagnostic replay.
   }
 }
 
@@ -840,14 +888,18 @@ export default function WatchPage() {
     setStreamReloadKey(value => value + 1);
   }, [animeId, currentEp]);
 
-  const reportPlayerEvent = useCallback((event, details = {}) => {
+  const buildPlayerEventPayload = useCallback((event, details = {}) => {
     const video = videoRef.current;
 
-    postPlayerEvent({
+    return {
       event,
       animeId,
       episodeId: currentEp?.id ?? null,
       episodeNumber: currentEp?.episode_number ?? null,
+      clientAt: new Date().toISOString(),
+      online: typeof navigator !== 'undefined' ? navigator.onLine : null,
+      pageHidden: typeof document !== 'undefined' ? document.hidden : null,
+      visibilityState: typeof document !== 'undefined' ? document.visibilityState : null,
       currentTime: video?.currentTime ?? null,
       duration: video?.duration ?? null,
       bufferAhead: video ? bufferedSecondsAhead(video) : null,
@@ -856,8 +908,12 @@ export default function WatchPage() {
       paused: video?.paused ?? null,
       ended: video?.ended ?? null,
       ...details,
-    });
+    };
   }, [animeId, currentEp]);
+
+  const reportPlayerEvent = useCallback((event, details = {}) => {
+    postPlayerEvent(buildPlayerEventPayload(event, details));
+  }, [buildPlayerEventPayload]);
 
   // Load anime data
   useEffect(() => {
@@ -970,16 +1026,24 @@ export default function WatchPage() {
         const res = await fetch(`/api/stream/${currentEp.id}${streamQuery ? `?${streamQuery}` : ''}`, {
           signal: abortController.signal,
         });
-        const data = await res.json();
+        let data = null;
+        let responseParseError = null;
+
+        try {
+          data = await res.json();
+        } catch (parseError) {
+          responseParseError = parseError.message || 'stream-response-json-error';
+        }
 
         if (!isActive()) return;
 
-        if (!res.ok) {
+        if (!res.ok || !data) {
+          const reason = data?.error || responseParseError || 'Failed to load stream';
           reportPlayerEvent('stream-request-failed', {
             responseCode: res.status,
-            reason: data.error || 'Failed to load stream',
+            reason,
           });
-          setStreamError(data.error || 'Failed to load stream');
+          setStreamError(data?.error || 'Failed to load stream');
           return;
         }
 
@@ -1029,6 +1093,7 @@ export default function WatchPage() {
             : chooseInitialSubtitle(subtitleTracks, animeId);
         const initialSubtitleTrack = getSubtitleById(subtitleTracks, initialSubtitle);
 
+        flushQueuedPlayerEvents();
         reportPlayerEvent('stream-ready', {
           ...streamLogContext,
           audioTrackCount: audioTrackOptions.length,
@@ -1174,6 +1239,14 @@ export default function WatchPage() {
           };
 
           const handleNativeStallEvent = event => {
+            if (
+              !video.paused
+              && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA
+              && bufferedSecondsAhead(video) > 0.5
+            ) {
+              return;
+            }
+
             reportPlayerEvent('video-stall-event', {
               ...streamLogContext,
               reason: event.type,
@@ -1451,6 +1524,14 @@ export default function WatchPage() {
           };
 
           const handleStallEvent = event => {
+            if (
+              !video.paused
+              && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA
+              && bufferedSecondsAhead(video) > 0.5
+            ) {
+              return;
+            }
+
             reportPlayerEvent('video-stall-event', {
               ...streamLogContext,
               reason: event.type,
@@ -1710,9 +1791,11 @@ export default function WatchPage() {
         if (!isActive()) return;
 
         console.error('Stream init error:', err);
-        reportPlayerEvent('stream-init-error', {
+        const failureEvent = buildPlayerEventPayload('stream-init-error', {
           reason: err.message || 'stream-init-error',
         });
+        queuePlayerEvent(failureEvent);
+        postPlayerEvent(failureEvent);
         setStreamError('Failed to connect to streaming server.');
       } finally {
         if (isActive()) {
@@ -1729,7 +1812,7 @@ export default function WatchPage() {
       removeVideoRecoveryListeners();
       teardownPlayer(ownedVideo);
     };
-  }, [currentEp, selectedAudioTrack, subtitleMode, burnedSubtitleKey, teardownPlayer, animeId, streamReloadKey, reportPlayerEvent]);
+  }, [currentEp, selectedAudioTrack, subtitleMode, burnedSubtitleKey, teardownPlayer, animeId, streamReloadKey, reportPlayerEvent, buildPlayerEventPayload]);
 
   useEffect(() => {
     const softSubtitle = subtitleMode === 'burned' ? 'off' : selectedSubtitle;
