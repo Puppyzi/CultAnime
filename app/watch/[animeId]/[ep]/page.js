@@ -16,6 +16,7 @@ const USER_PLAYBACK_ACTION_GRACE_MS = 2000;
 const MAX_AUTOMATIC_STREAM_RELOADS = 4;
 const PENDING_PLAYER_EVENTS_KEY = 'cultanime.pendingPlayerEvents';
 const MAX_PENDING_PLAYER_EVENTS = 20;
+const PLAYBACK_KEEPALIVE_INTERVAL_MS = 10000;
 
 function mediaPreferenceKey(baseKey, animeId) {
   return animeId ? `${baseKey}.${animeId}` : baseKey;
@@ -357,6 +358,57 @@ function postPlayerEvent(payload) {
   } catch {
     // Playback logging must never interrupt playback.
   }
+}
+
+function postPlaybackSessionAction(payload, { useBeacon = false } = {}) {
+  try {
+    const body = JSON.stringify(payload);
+
+    if (useBeacon && navigator.sendBeacon) {
+      const blob = new Blob([body], { type: 'application/json' });
+      if (navigator.sendBeacon('/api/playback-session', blob)) {
+        return;
+      }
+    }
+
+    fetch('/api/playback-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: useBeacon,
+    }).catch(() => {});
+  } catch {
+    // Session keep-alive must never interrupt playback.
+  }
+}
+
+// Jellyfin kills an idle HLS transcode (and deletes its segments) roughly a
+// minute after the last playlist/segment request, which is what used to break
+// the player after a pause longer than the buffered runway. Pinging the play
+// session on an interval keeps the transcode alive, including while paused;
+// the stop action ends the transcode as soon as the stream is torn down.
+function startPlaybackKeepAlive({ playSessionId, deviceId }) {
+  if (!playSessionId || !deviceId) return () => {};
+
+  let stopped = false;
+
+  const sendPing = () => {
+    postPlaybackSessionAction({ action: 'ping', playSessionId, deviceId });
+  };
+  const intervalId = window.setInterval(sendPing, PLAYBACK_KEEPALIVE_INTERVAL_MS);
+
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    window.clearInterval(intervalId);
+    window.removeEventListener('pagehide', stop);
+    postPlaybackSessionAction({ action: 'stop', playSessionId, deviceId }, { useBeacon: true });
+  };
+
+  window.addEventListener('pagehide', stop);
+  sendPing();
+
+  return stop;
 }
 
 function queuePlayerEvent(payload) {
@@ -999,6 +1051,7 @@ export default function WatchPage() {
     const ownedVideo = videoRef.current;
     let active = true;
     let removeVideoRecoveryListeners = () => {};
+    let stopPlaybackKeepAlive = () => {};
     const isActive = () => active
       && streamRunRef.current === streamRunId
       && !abortController.signal.aborted;
@@ -1122,6 +1175,11 @@ export default function WatchPage() {
           installSubtitleTracks(video, subtitleTracks, initialSubtitle);
         }
 
+        stopPlaybackKeepAlive = startPlaybackKeepAlive({
+          playSessionId: data.streamSessionId,
+          deviceId: data.deviceId,
+        });
+
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
           let nativeStallTimer = null;
           let nativeWatchdogTimer = null;
@@ -1210,6 +1268,7 @@ export default function WatchPage() {
                 ...extra,
               });
               setStreamError('Playback lost its connection. Retry to continue from the same place.');
+              stopPlaybackKeepAlive();
               teardownPlayer(video);
               return;
             }
@@ -1533,6 +1592,7 @@ export default function WatchPage() {
                 ...extra,
               });
               setStreamError('Playback lost its connection. Retry to continue from the same place.');
+              stopPlaybackKeepAlive();
               teardownPlayer(video);
               return;
             }
@@ -1844,6 +1904,7 @@ export default function WatchPage() {
                 hls.recoverMediaError();
                 break;
               default:
+                stopPlaybackKeepAlive();
                 teardownPlayer();
                 setStreamError('Playback error. The video could not be loaded.');
                 break;
@@ -1862,6 +1923,7 @@ export default function WatchPage() {
             video.play().catch(() => {});
           }
         } else {
+          stopPlaybackKeepAlive();
           reportPlayerEvent('stream-unsupported', {
             streamSessionId: data.streamSessionId,
             delivery: data.delivery,
@@ -1874,6 +1936,7 @@ export default function WatchPage() {
         if (!isActive()) return;
 
         console.error('Stream init error:', err);
+        stopPlaybackKeepAlive();
         const failureEvent = buildPlayerEventPayload('stream-init-error', {
           reason: err.message || 'stream-init-error',
         });
@@ -1893,6 +1956,7 @@ export default function WatchPage() {
       active = false;
       abortController.abort();
       removeVideoRecoveryListeners();
+      stopPlaybackKeepAlive();
       teardownPlayer(ownedVideo);
     };
   }, [currentEp, selectedAudioTrack, subtitleMode, burnedSubtitleKey, teardownPlayer, animeId, streamReloadKey, reportPlayerEvent, buildPlayerEventPayload]);

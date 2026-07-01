@@ -112,6 +112,7 @@ export async function GET(request, { params }) {
       audioStreamIndex: audioTrack?.index ?? null,
       subtitles,
       streamSessionId,
+      deviceId: streamIdentity,
       subtitleMode: burnedInSubtitle ? 'burned' : requestedSubtitleMode === 'off' ? 'off' : 'soft',
       burnedInSubtitleIndex: burnedInSubtitle?.index ?? null,
       delivery: deliveryProfile.delivery,
