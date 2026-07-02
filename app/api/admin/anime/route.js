@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '../../../../lib/db';
 
+const UPDATABLE_COLUMNS = new Set([
+  'title', 'title_romaji', 'title_english', 'description', 'cover_image',
+  'banner_image', 'genres', 'status', 'episodes_total', 'rating', 'year',
+  'season', 'format', 'studios', 'anilist_id', 'jellyfin_id',
+]);
+
 export async function POST(request) {
   try {
     const db = getDb();
@@ -31,6 +37,14 @@ export async function PUT(request) {
     const { id, ...fields } = body;
     if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 });
 
+    const unknownFields = Object.keys(fields).filter(key => !UPDATABLE_COLUMNS.has(key));
+    if (unknownFields.length > 0) {
+      return NextResponse.json(
+        { error: `Unknown fields: ${unknownFields.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
     const sets = [];
     const values = [];
     for (const [key, value] of Object.entries(fields)) {
@@ -51,6 +65,7 @@ export async function DELETE(request) {
   try {
     const db = getDb();
     const { id } = await request.json();
+    if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 });
     db.prepare('DELETE FROM anime WHERE id = ?').run(id);
     return NextResponse.json({ success: true });
   } catch (error) {

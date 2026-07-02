@@ -1,9 +1,7 @@
 'use client';
 import { useState, useEffect, Suspense } from 'react';
-import Link from 'next/link';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { mediaFormatLabel } from '../../lib/media-format';
-import { mediaStatusBadgeLabel } from '../../lib/media-status';
+import { useSearchParams } from 'next/navigation';
+import { AnimeCard } from '../../components/AnimeCard';
 
 const ALL_GENRES = ['Action','Adventure','Comedy','Drama','Fantasy','Horror','Mecha','Music','Mystery','Psychological','Romance','Sci-Fi','Slice of Life','Sports','Supernatural','Thriller'];
 
@@ -85,7 +83,7 @@ function BrowseContent() {
         </div>
       ) : (
         <div className="anime-grid">
-          {anime.map(a => <BrowseAnimeCard key={a.id} a={a} />)}
+          {anime.map(a => <AnimeCard key={a.id} anime={a} />)}
         </div>
       )}
     </div>
@@ -100,40 +98,3 @@ export default function BrowsePage() {
   );
 }
 
-function BrowseAnimeCard({ a }) {
-  const router = useRouter();
-  const [isFlipping, setIsFlipping] = useState(false);
-  const formatLabel = mediaFormatLabel(a.format);
-  const statusLabel = mediaStatusBadgeLabel(a);
-
-  const handleClick = (e) => {
-    e.preventDefault();
-    if (isFlipping) return;
-    setIsFlipping(true);
-    setTimeout(() => {
-      router.push(`/anime/${a.id}`);
-    }, 500);
-  };
-
-  return (
-    <a href={`/anime/${a.id}`} onClick={handleClick} className={`anime-card ${isFlipping ? 'card-flip-out' : ''}`}>
-      <div className="anime-card-image-wrap">
-        <img className="anime-card-image" src={a.cover_image || '/placeholder.png'} alt={a.title} />
-        <div className="anime-card-badge">
-          {formatLabel && <span className="badge-format">{formatLabel}</span>}
-          {a.episode_count > 0 && <span className="badge-eps">{a.episode_count} EP</span>}
-          {statusLabel && <span className="badge-status">{statusLabel}</span>}
-        </div>
-        <div className="anime-card-overlay">
-          <span className="btn btn-primary btn-sm">▶ Watch</span>
-        </div>
-      </div>
-      <div className="anime-card-info">
-        <div className="anime-card-title">{a.title}</div>
-        <div className="anime-card-meta">
-          {a.rating && <span className="anime-card-rating">⭐ {a.rating}%</span>}
-        </div>
-      </div>
-    </a>
-  );
-}

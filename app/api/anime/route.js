@@ -17,7 +17,12 @@ export async function GET(request) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = (page - 1) * limit;
 
-    let query = 'SELECT * FROM anime';
+    let query = `
+      SELECT
+        anime.*,
+        (SELECT COUNT(*) FROM episodes e WHERE e.anime_id = anime.id) AS episode_count
+      FROM anime
+    `;
     let countQuery = 'SELECT COUNT(*) as total FROM anime';
     const queryParams = [];
 
@@ -35,11 +40,11 @@ export async function GET(request) {
     const total = db.prepare(countQuery).get(...queryParams)?.total || 0;
     const anime = db.prepare(query).all(...queryParams, limit, offset);
 
-    // Get episode counts
-    const enriched = anime.map(a => {
-      const epCount = db.prepare('SELECT COUNT(*) as count FROM episodes WHERE anime_id = ?').get(a.id);
-      return { ...a, genres: JSON.parse(a.genres || '[]'), studios: JSON.parse(a.studios || '[]'), episode_count: epCount.count };
-    });
+    const enriched = anime.map(a => ({
+      ...a,
+      genres: JSON.parse(a.genres || '[]'),
+      studios: JSON.parse(a.studios || '[]'),
+    }));
 
     return NextResponse.json({ anime: enriched, total, page, totalPages: Math.ceil(total / limit) });
   } catch (error) {

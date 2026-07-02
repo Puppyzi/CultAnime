@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 import { getDb } from '../../../lib/db';
-import { getSessionId } from '../../../lib/session';
+import { createSessionCookie, getSessionId } from '../../../lib/session';
 
 export async function GET() {
   try {
@@ -51,9 +51,7 @@ export async function POST(request) {
     }
 
     const response = NextResponse.json({ success: true });
-    response.cookies.set('cultanime_session', sessionId, {
-      httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 365, path: '/',
-    });
+    response.cookies.set(createSessionCookie(sessionId, request));
     return response;
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
