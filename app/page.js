@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { mediaFormatLabel } from '../lib/media-format';
 import { mediaStatusBadgeLabel } from '../lib/media-status';
+import ScrollRow from '../components/ScrollRow';
 export default function HomePage() {
   const [anime, setAnime] = useState([]);
   const [history, setHistory] = useState([]);
@@ -168,11 +169,11 @@ export default function HomePage() {
               <div className="section-header">
                 <h2>Continue Watching</h2>
               </div>
-              <div className="anime-row">
+              <ScrollRow>
                 {history.map(h => (
                   <ContinueWatchingCard key={h.id} item={h} />
                 ))}
-              </div>
+              </ScrollRow>
             </section>
           )}
 
@@ -181,9 +182,9 @@ export default function HomePage() {
               <h2>Recently Added</h2>
               <Link href="/browse">View All →</Link>
             </div>
-            <div className="anime-row">
+            <ScrollRow>
               {anime.slice(0, 15).map(a => <AnimeCard key={a.id} anime={a} />)}
-            </div>
+            </ScrollRow>
           </section>
 
           {popular.length > 0 && (
@@ -192,9 +193,9 @@ export default function HomePage() {
                 <h2>Top Rated</h2>
                 <Link href="/browse?sort=rating">View All →</Link>
               </div>
-              <div className="anime-row">
+              <ScrollRow>
                 {popular.slice(0, 15).map(a => <AnimeCard key={a.id} anime={a} />)}
-              </div>
+              </ScrollRow>
             </section>
           )}
         </div>

@@ -12,7 +12,7 @@ export async function GET() {
       FROM watch_history wh
       JOIN episodes e ON wh.episode_id = e.id
       JOIN anime a ON wh.anime_id = a.id
-      WHERE wh.session_id = ?
+      WHERE wh.session_id = ? AND wh.completed = 0
       ORDER BY wh.updated_at DESC
       LIMIT 20
     `).all(sessionId);

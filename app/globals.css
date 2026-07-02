@@ -275,8 +275,14 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
   display: flex; gap: 0.75rem; overflow-x: auto; padding-bottom: 0.5rem;
   scroll-snap-type: x mandatory; -ms-overflow-style: none; scrollbar-width: none;
   -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; touch-action: pan-x pan-y;
+  cursor: grab;
 }
 .anime-row::-webkit-scrollbar { display: none; }
+.anime-row.dragging {
+  cursor: grabbing; scroll-snap-type: none; user-select: none;
+}
+.anime-row.dragging .anime-card { pointer-events: none; }
+.anime-row .anime-card-image { -webkit-user-drag: none; user-select: none; }
 
 /* ---- ANIME CARD ---- */
 .anime-card {
