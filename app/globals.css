@@ -87,13 +87,21 @@ input, textarea, select { font-family: inherit; }
   transition: color var(--transition), text-shadow var(--transition);
   animation: navbarLogoGlow 4.6s ease-in-out infinite;
 }
+/* Shine sweep: ::after plays once on page load, ::before replays on hover. */
+.navbar-logo::before,
 .navbar-logo::after {
   position: absolute; inset: -0.35rem auto -0.35rem -42%;
   z-index: 1; width: 34%; pointer-events: none;
   background: linear-gradient(110deg, transparent, rgba(255,255,255,0.7), transparent);
   content: '';
   transform: skewX(-20deg);
-  animation: navbarLogoSweep 3.8s ease-in-out infinite;
+  opacity: 0;
+}
+.navbar-logo::after {
+  animation: navbarLogoSweep 2.6s ease-in-out 0.7s 1;
+}
+.navbar-logo:hover::before {
+  animation: navbarLogoSweep 2s ease-in-out 1;
 }
 .navbar-logo span {
   position: relative; z-index: 0;
@@ -116,14 +124,18 @@ input, textarea, select { font-family: inherit; }
     text-shadow: 0 0 13px rgba(192,96,255,0.42), 0 0 24px rgba(26,167,232,0.22);
   }
 }
+/* Two passes: left-to-right, a short beat off-screen, then back right-to-left. */
 @keyframes navbarLogoSweep {
-  0%, 58% { left: -42%; opacity: 0; }
-  66% { opacity: 0.78; }
-  82% { left: 112%; opacity: 0.12; }
-  100% { left: 112%; opacity: 0; }
+  0% { left: -42%; opacity: 0; }
+  10% { opacity: 0.78; }
+  45% { left: 112%; opacity: 0.12; }
+  55% { left: 112%; opacity: 0.12; }
+  70% { opacity: 0.78; }
+  100% { left: -42%; opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .navbar-logo,
+  .navbar-logo::before,
   .navbar-logo::after {
     animation: none;
   }
