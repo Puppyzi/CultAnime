@@ -2,6 +2,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AnimeCard } from '../../components/AnimeCard';
+import { SearchIcon } from '../../components/Icons';
 
 const ALL_GENRES = ['Action','Adventure','Comedy','Drama','Fantasy','Horror','Mecha','Music','Mystery','Psychological','Romance','Sci-Fi','Slice of Life','Sports','Supernatural','Thriller'];
 
@@ -58,7 +59,7 @@ function BrowseContent() {
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
         {['created_at', 'rating', 'title', 'year'].map(s => (
           <button key={s} className={`genre-filter-btn ${sort === s ? 'active' : ''}`} onClick={() => setSort(s)}>
-            {s === 'created_at' ? '🕐 Recent' : s === 'rating' ? '⭐ Rating' : s === 'title' ? '🔤 Title' : '📅 Year'}
+            {s === 'created_at' ? 'Recent' : s === 'rating' ? 'Rating' : s === 'title' ? 'Title' : 'Year'}
           </button>
         ))}
       </div>
@@ -77,7 +78,7 @@ function BrowseContent() {
         </div>
       ) : anime.length === 0 ? (
         <div className="empty-state">
-          <div className="icon">🔍</div>
+          <div className="icon"><SearchIcon /></div>
           <h3>No anime found</h3>
           <p>Try a different search or filter</p>
         </div>

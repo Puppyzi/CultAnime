@@ -3,32 +3,40 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { mediaFormatLabel } from '../lib/media-format';
 import { mediaStatusBadgeLabel } from '../lib/media-status';
+import { PlayIcon, StarIcon } from './Icons';
 
 // Plays the card flip-out animation before navigating.
+// The destination route is prefetched on hover and at flip start so the
+// page loads during the animation instead of after it.
 function useFlipNavigation(href) {
   const router = useRouter();
   const [isFlipping, setIsFlipping] = useState(false);
 
+  const handleMouseEnter = () => {
+    router.prefetch(href);
+  };
+
   const handleClick = (e) => {
     e.preventDefault();
     if (isFlipping) return;
+    router.prefetch(href);
     setIsFlipping(true);
     setTimeout(() => {
       router.push(href);
     }, 500);
   };
 
-  return { isFlipping, handleClick };
+  return { isFlipping, handleClick, handleMouseEnter };
 }
 
 export function AnimeCard({ anime }) {
   const href = `/anime/${anime.id}`;
-  const { isFlipping, handleClick } = useFlipNavigation(href);
+  const { isFlipping, handleClick, handleMouseEnter } = useFlipNavigation(href);
   const formatLabel = mediaFormatLabel(anime.format);
   const statusLabel = mediaStatusBadgeLabel(anime);
 
   return (
-    <a href={href} onClick={handleClick} className={`anime-card ${isFlipping ? 'card-flip-out' : ''}`}>
+    <a href={href} onClick={handleClick} onMouseEnter={handleMouseEnter} className={`anime-card ${isFlipping ? 'card-flip-out' : ''}`}>
       <div className="anime-card-image-wrap">
         <img className="anime-card-image" src={anime.cover_image || '/placeholder.png'} alt={anime.title} />
         <div className="anime-card-badge">
@@ -37,13 +45,13 @@ export function AnimeCard({ anime }) {
           {statusLabel && <span className="badge-status">{statusLabel}</span>}
         </div>
         <div className="anime-card-overlay">
-          <span className="btn btn-primary btn-sm">▶ Watch</span>
+          <span className="btn btn-primary btn-sm"><PlayIcon /> Watch</span>
         </div>
       </div>
       <div className="anime-card-info">
         <div className="anime-card-title">{anime.title}</div>
         <div className="anime-card-meta">
-          {anime.rating && <span className="anime-card-rating">⭐ {anime.rating}%</span>}
+          {anime.rating && <span className="anime-card-rating"><StarIcon /> {anime.rating}%</span>}
         </div>
       </div>
     </a>
@@ -52,14 +60,14 @@ export function AnimeCard({ anime }) {
 
 export function ContinueWatchingCard({ item }) {
   const href = `/watch/${item.anime_id}/${item.episode_number}`;
-  const { isFlipping, handleClick } = useFlipNavigation(href);
+  const { isFlipping, handleClick, handleMouseEnter } = useFlipNavigation(href);
   const formatLabel = mediaFormatLabel(item.format);
   const progressPercent = item.duration > 0
     ? Math.min(100, Math.max(0, (item.progress / item.duration) * 100))
     : 0;
 
   return (
-    <a href={href} onClick={handleClick} className={`anime-card ${isFlipping ? 'card-flip-out' : ''}`}>
+    <a href={href} onClick={handleClick} onMouseEnter={handleMouseEnter} className={`anime-card ${isFlipping ? 'card-flip-out' : ''}`}>
       <div className="anime-card-image-wrap">
         <img className="anime-card-image" src={item.cover_image || '/placeholder.png'} alt={item.title} />
         {formatLabel && (
@@ -73,7 +81,7 @@ export function ContinueWatchingCard({ item }) {
           </div>
         )}
         <div className="anime-card-overlay">
-          <span className="btn btn-primary btn-sm">▶ Continue</span>
+          <span className="btn btn-primary btn-sm"><PlayIcon /> Continue</span>
         </div>
       </div>
       <div className="anime-card-info">

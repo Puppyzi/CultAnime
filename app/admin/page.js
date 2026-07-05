@@ -1,5 +1,17 @@
 'use client';
 import { useState, useEffect } from 'react';
+import {
+  RefreshIcon,
+  PlusIcon,
+  ListIcon,
+  FilmIcon,
+  SearchIcon,
+  HourglassIcon,
+  StarIcon,
+  EditIcon,
+  FolderIcon,
+  CloseIcon,
+} from '../../components/Icons';
 
 const emptyEpisodeEditForm = {
   id: '',
@@ -479,10 +491,10 @@ export default function AdminPage() {
   }
 
   const tabs = [
-    { id: 'sync', label: '🔄 Sync Library' },
-    { id: 'add', label: '➕ Add Anime' },
-    { id: 'manage', label: '📋 Manage' },
-    { id: 'episodes', label: '🎬 Episodes' },
+    { id: 'sync', label: <><RefreshIcon /> Sync Library</> },
+    { id: 'add', label: <><PlusIcon /> Add Anime</> },
+    { id: 'manage', label: <><ListIcon /> Manage</> },
+    { id: 'episodes', label: <><FilmIcon /> Episodes</> },
   ];
 
   return (
@@ -597,28 +609,28 @@ export default function AdminPage() {
           <div className="admin-card">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <div>
-                <h3 style={{ margin: 0 }}>🔄 Jellyfin Library Sync</h3>
+                <h3 style={{ margin: 0 }}><RefreshIcon /> Jellyfin Library Sync</h3>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
                   Automatically import anime series and anime movies from your Jellyfin server with AniList metadata.
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button className="btn btn-secondary" onClick={loadSyncPreview} disabled={syncLoading}>
-                  {syncLoading ? '⏳ Scanning...' : '🔍 Scan Jellyfin'}
+                  {syncLoading ? <><HourglassIcon /> Scanning...</> : <><SearchIcon /> Scan Jellyfin</>}
                 </button>
               </div>
             </div>
 
             {!syncPreview && !syncLoading && (
               <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
-                <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📡</p>
+                <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}><SearchIcon /></p>
                 <p>Click <strong>Scan Jellyfin</strong> to see what anime are available to import.</p>
               </div>
             )}
 
             {syncLoading && (
               <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
-                <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>⏳</p>
+                <p style={{ fontSize: '2rem', marginBottom: '0.5rem' }}><HourglassIcon /></p>
                 <p>Scanning your Jellyfin library...</p>
               </div>
             )}
@@ -723,7 +735,7 @@ export default function AdminPage() {
       {tab === 'add' && (
         <div>
           <div className="admin-card">
-            <h3>🔍 Import from AniList</h3>
+            <h3><SearchIcon /> Import from AniList</h3>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <input className="form-input" placeholder="Search AniList..." value={anilistQuery}
                 onChange={e => setAnilistQuery(e.target.value)}
@@ -737,7 +749,7 @@ export default function AdminPage() {
                     <img src={r.cover_image} alt={r.title} />
                     <div className="info">
                       <h4>{r.title}</h4>
-                      <p>{r.year} • {r.format} • {r.episodes || '?'} eps • ⭐ {r.rating}%</p>
+                      <p>{r.year} • {r.format} • {r.episodes || '?'} eps • <StarIcon style={{ color: 'var(--yellow)' }} /> {r.rating}%</p>
                     </div>
                   </div>
                 ))}
@@ -746,7 +758,7 @@ export default function AdminPage() {
           </div>
 
           <form className="admin-card" onSubmit={saveAnime}>
-            <h3>📝 Anime Details</h3>
+            <h3><EditIcon /> Anime Details</h3>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <div className="form-group">
                 <label>Title *</label>
@@ -828,7 +840,7 @@ export default function AdminPage() {
                   <img src={a.cover_image || '/placeholder.png'} alt={a.title} />
                   <div className="info">
                     <h4>{a.title}</h4>
-                    <p>{a.episode_count} episodes linked • {a.year || 'N/A'} • ⭐ {a.rating || 'N/A'}%</p>
+                    <p>{a.episode_count} episodes linked • {a.year || 'N/A'} • <StarIcon style={{ color: 'var(--yellow)' }} /> {a.rating || 'N/A'}%</p>
                   </div>
                   <div className="actions">
                     <button className="btn btn-secondary btn-sm" onClick={() => selectAnime(a)}>Episodes</button>
@@ -871,7 +883,7 @@ export default function AdminPage() {
             <>
               <div className="admin-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h3>📂 {selectedAnime.title} — Episodes</h3>
+                  <h3><FolderIcon /> {selectedAnime.title} — Episodes</h3>
                   <button className="btn btn-secondary btn-sm" onClick={() => setSelectedAnime(null)}>← Back</button>
                 </div>
 
@@ -892,7 +904,7 @@ export default function AdminPage() {
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => startEditEpisode(ep)}>
                             {editingEpisodeId === ep.id ? 'Editing' : 'Edit'}
                           </button>
-                          <button type="button" className="btn btn-sm" style={{ color: '#ef4444' }} onClick={() => deleteEpisode(ep.id)}>✕</button>
+                          <button type="button" className="btn btn-sm" style={{ color: '#ef4444' }} onClick={() => deleteEpisode(ep.id)}><CloseIcon /></button>
                         </div>
 
                         {editingEpisodeId === ep.id && (
@@ -942,7 +954,7 @@ export default function AdminPage() {
               </div>
 
               <form className="admin-card" onSubmit={addEpisode}>
-                <h3>➕ Add Episode</h3>
+                <h3><PlusIcon /> Add Episode</h3>
                 <div style={{ display: 'grid', gridTemplateColumns: '100px 1fr 1fr', gap: '1rem' }}>
                   <div className="form-group">
                     <label>EP #</label>

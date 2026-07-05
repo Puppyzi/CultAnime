@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { mediaFormatLabel } from '../lib/media-format';
 import ScrollRow from '../components/ScrollRow';
 import { AnimeCard, ContinueWatchingCard } from '../components/AnimeCard';
+import { PlayIcon, StarIcon, FlameIcon, FilmIcon } from '../components/Icons';
 export default function HomePage() {
   const [anime, setAnime] = useState([]);
   const [history, setHistory] = useState([]);
@@ -45,6 +46,10 @@ export default function HomePage() {
   const popular = [...anime].sort((a, b) => (b.rating || 0) - (a.rating || 0));
   const featured = anime[featuredIndex] || anime[0] || null;
   const featuredFormatLabel = featured ? mediaFormatLabel(featured.format) : '';
+  const featuredHistory = featured ? history.find(h => h.anime_id === featured.id) : null;
+  const featuredWatchHref = featured
+    ? `/watch/${featured.id}/${featuredHistory?.episode_number || 1}`
+    : null;
   const canSwipeHero = anime.length > 1;
 
   function goToHero(index) {
@@ -106,7 +111,7 @@ export default function HomePage() {
   if (anime.length === 0) {
     return (
       <div className="empty-state" style={{ paddingTop: '8rem' }}>
-        <div className="icon">🎬</div>
+        <div className="icon"><FilmIcon /></div>
         <h3>No anime yet</h3>
         <p>Head to the <Link href="/admin" style={{ color: 'var(--accent)' }}>Admin Panel</Link> to add your first anime!</p>
       </div>
@@ -128,7 +133,7 @@ export default function HomePage() {
           <div key={`hero-content-${featured.id}`} className="hero-content">
             <h1>{featured.title}</h1>
             <div className="hero-meta">
-              {featured.rating && <span>⭐ {featured.rating}%</span>}
+              {featured.rating && <span><StarIcon style={{ color: 'var(--yellow)' }} /> {featured.rating}%</span>}
               {featuredFormatLabel && <span>{featuredFormatLabel}</span>}
               {featured.year && <span>{featured.year}</span>}
               {featured.episodes_total && <span>{featured.episodes_total} EP</span>}
@@ -136,7 +141,9 @@ export default function HomePage() {
             </div>
             <p className="hero-description">{featured.description}</p>
             <div className="hero-actions">
-              <Link href={`/anime/${featured.id}`} className="btn btn-primary">▶ Watch Now</Link>
+              <Link href={featuredWatchHref} className="btn btn-primary">
+                <PlayIcon /> {featuredHistory ? `Continue EP ${featuredHistory.episode_number}` : 'Watch Now'}
+              </Link>
               <Link href={`/anime/${featured.id}`} className="btn btn-secondary">Detail</Link>
             </div>
           </div>
@@ -201,7 +208,7 @@ export default function HomePage() {
 
         {/* AnimeKai-style sidebar */}
         <aside className="home-sidebar">
-          <div className="sidebar-title">🔥 Top Anime</div>
+          <div className="sidebar-title"><FlameIcon style={{ color: '#fb923c' }} /> Top Anime</div>
           {popular.slice(0, 10).map((a, i) => (
             <Link key={a.id} href={`/anime/${a.id}`} className="sidebar-item">
               <span className={`sidebar-rank ${i < 3 ? 'top' : ''}`}>{String(i + 1).padStart(2, '0')}</span>

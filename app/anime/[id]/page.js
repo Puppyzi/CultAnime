@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { PlayIcon, StarIcon } from '../../../components/Icons';
 
 const TICKS_PER_SECOND = 10000000;
 
@@ -279,7 +280,7 @@ export default function AnimeDetailPage() {
           <div className="anime-detail-actions">
             {anime.episodes?.length > 0 && (
               <Link href={`/watch/${anime.id}/1`} className="btn btn-primary" style={{ justifyContent: 'center' }}>
-                ▶ Start Watching
+                <PlayIcon /> Start Watching
               </Link>
             )}
             <button onClick={toggleWatchlist} className="btn btn-secondary" style={{ justifyContent: 'center' }}>
@@ -298,7 +299,7 @@ export default function AnimeDetailPage() {
           )}
           
           <div className="anime-detail-stats">
-            {anime.rating && <span className="stat-badge rating">⭐ {anime.rating}%</span>}
+            {anime.rating && <span className="stat-badge rating"><StarIcon /> {anime.rating}%</span>}
             {anime.status && <span className="stat-badge">{anime.status}</span>}
             {anime.year && <span className="stat-badge">{anime.year}</span>}
             {anime.format && <span className="stat-badge">{anime.format}</span>}
@@ -332,7 +333,7 @@ export default function AnimeDetailPage() {
                         {meta && <span className="episode-meta">{meta}</span>}
                         {ep.overview && <span className="episode-overview">{ep.overview}</span>}
                       </span>
-                      <span style={{ color: 'var(--accent)', fontSize: '0.85rem' }}>▶</span>
+                      <span style={{ color: 'var(--accent)', fontSize: '0.85rem' }}><PlayIcon /></span>
                     </Link>
                   );
                 })}

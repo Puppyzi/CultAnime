@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { SearchIcon } from './Icons';
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -71,7 +72,7 @@ export default function Navbar() {
         ))}
       </div>
       <div className="navbar-search" ref={searchRef}>
-        <span className="search-icon">🔍</span>
+        <span className="search-icon"><SearchIcon /></span>
         <input
           type="text" placeholder="Search anime..."
           value={query} onChange={e => setQuery(e.target.value)}

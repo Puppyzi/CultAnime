@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import Hls from 'hls.js';
+import { PlayIcon } from '../../../../components/Icons';
 import {
   chooseSubtitle,
   isJapaneseAudioTrack,
@@ -1971,7 +1972,7 @@ export default function WatchPage() {
                   {e.episode_number === episodeNum && <span className="now-playing-badge sidebar-now-playing">Now Playing</span>}
                   {meta && <span className="episode-meta">{meta}</span>}
                 </span>
-              {e.episode_number === episodeNum && <span style={{ color: 'var(--accent)' }}>▶</span>}
+              {e.episode_number === episodeNum && <span style={{ color: 'var(--accent)' }}><PlayIcon /></span>}
             </Link>
             );
           })}

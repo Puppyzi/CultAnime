@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { mediaFormatLabel } from '../../lib/media-format';
 import { mediaStatusBadgeLabel } from '../../lib/media-status';
+import { StarIcon, CloseIcon, BookmarkIcon } from '../../components/Icons';
 
 export default function WatchlistPage() {
   const [watchlist, setWatchlist] = useState([]);
@@ -44,7 +45,7 @@ export default function WatchlistPage() {
         </div>
       ) : watchlist.length === 0 ? (
         <div className="empty-state">
-          <div className="icon">📋</div>
+          <div className="icon"><BookmarkIcon /></div>
           <h3>Your watchlist is empty</h3>
           <p>Browse anime and add them to your watchlist</p>
           <Link href="/browse" className="btn btn-primary" style={{ marginTop: '1rem' }}>Browse Anime</Link>
@@ -71,14 +72,14 @@ export default function WatchlistPage() {
                   <div className="anime-card-info">
                     <div className="anime-card-title">{w.title}</div>
                     <div className="anime-card-meta">
-                      {w.rating && <span className="anime-card-rating">⭐ {w.rating}%</span>}
+                      {w.rating && <span className="anime-card-rating"><StarIcon /> {w.rating}%</span>}
                       {w.year && <span>{w.year}</span>}
                     </div>
                   </div>
                 </Link>
                 <button onClick={() => remove(w.anime_id)}
                   style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', background: 'rgba(0,0,0,0.7)', borderRadius: '50%', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', border: '1px solid var(--border)' }}>
-                  ✕
+                  <CloseIcon />
                 </button>
               </div>
             );
