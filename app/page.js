@@ -239,7 +239,7 @@ export default function HomePage() {
               <h2>All Anime</h2>
               <Link href="/browse">Browse &amp; Filter →</Link>
             </div>
-            <div className="anime-grid">
+            <div className="anime-grid home-anime-grid">
               {anime.map(a => <AnimeCard key={a.id} anime={a} />)}
             </div>
           </section>
