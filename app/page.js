@@ -176,7 +176,7 @@ export default function HomePage() {
               <Link href={featuredWatchHref} className="btn btn-primary">
                 <PlayIcon /> {featuredHistory ? `Continue EP ${featuredHistory.episode_number}` : 'Watch Now'}
               </Link>
-              <Link href={`/anime/${featured.id}`} className="btn btn-secondary">Detail</Link>
+              <Link href={`/anime/${featured.id}`} className="btn btn-secondary">Details</Link>
             </div>
           </div>
           {canSwipeHero && (

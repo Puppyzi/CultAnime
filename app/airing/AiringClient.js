@@ -65,6 +65,7 @@ export default function AiringClient({ initialGroups, initialSeason, initialYear
   const [query, setQuery] = useState('');
   const [loadingMoreKey, setLoadingMoreKey] = useState(null);
   const [error, setError] = useState(initialError || '');
+  const [pendingRequestIds, setPendingRequestIds] = useState({});
   const sortRef = useRef(null);
   const sortToggleRef = useRef(null);
   const sortKey = normalizeAiringSort(initialSort);
@@ -114,6 +115,17 @@ export default function AiringClient({ initialGroups, initialSeason, initialYear
     } finally {
       setLoadingMoreKey(null);
     }
+  }
+
+  function beginRequest(animeId) {
+    setPendingRequestIds(current => ({ ...current, [animeId]: true }));
+  }
+
+  function undoRequest(animeId) {
+    setPendingRequestIds(current => {
+      const { [animeId]: _removed, ...remaining } = current;
+      return remaining;
+    });
   }
 
   const filteredGroups = useMemo(() => {
@@ -205,7 +217,10 @@ export default function AiringClient({ initialGroups, initialSeason, initialYear
           type="text"
           placeholder="Filter by title, genre, or studio..."
           value={query}
-          onChange={event => setQuery(event.target.value)}
+          onChange={event => {
+            setQuery(event.target.value);
+            setPendingRequestIds({});
+          }}
         />
       </div>
 
@@ -263,12 +278,31 @@ export default function AiringClient({ initialGroups, initialSeason, initialYear
                             </div>
                           )}
                           <div className="airing-actions">
-                            <Link
-                              className="btn btn-primary btn-sm"
-                              href={`/request?q=${encodeURIComponent(requestTitleFor(item))}`}
-                            >
-                              Request
-                            </Link>
+                            {pendingRequestIds[item.anilist_id] ? (
+                              <>
+                                <Link
+                                  className="btn btn-primary btn-sm"
+                                  href={`/request?q=${encodeURIComponent(requestTitleFor(item))}`}
+                                >
+                                  Confirm
+                                </Link>
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  type="button"
+                                  onClick={() => undoRequest(item.anilist_id)}
+                                >
+                                  Undo
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                className="btn btn-primary btn-sm"
+                                type="button"
+                                onClick={() => beginRequest(item.anilist_id)}
+                              >
+                                Request
+                              </button>
+                            )}
                             <a
                               className="btn btn-secondary btn-sm"
                               href={`https://anilist.co/anime/${item.anilist_id}`}
