@@ -403,6 +403,9 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
 .anime-detail-actions .btn {
   justify-content: center;
 }
+.watchlist-button:disabled {
+  opacity: 0.65; cursor: wait; transform: none; box-shadow: none;
+}
 .series-download-confirm {
   position: relative;
 }

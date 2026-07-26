@@ -224,6 +224,9 @@ export default function AnimeDetailPage() {
   const [anime, setAnime] = useState(null);
   const [inWatchlist, setInWatchlist] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [watchlistBusy, setWatchlistBusy] = useState(false);
+  const watchlistActionRef = useRef(false);
+  const watchlistRequestIdRef = useRef(0);
 
   useEffect(() => {
     async function load() {
@@ -241,14 +244,47 @@ export default function AnimeDetailPage() {
     load();
   }, [id]);
 
+  useEffect(() => {
+    watchlistRequestIdRef.current += 1;
+    watchlistActionRef.current = false;
+    setWatchlistBusy(false);
+  }, [id]);
+
   async function toggleWatchlist() {
+    if (watchlistActionRef.current) return;
+
     const action = inWatchlist ? 'remove' : 'add';
-    await fetch('/api/watchlist', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ anime_id: parseInt(id), action }),
-    });
-    setInWatchlist(!inWatchlist);
+    const animeId = parseInt(id);
+    const requestId = watchlistRequestIdRef.current + 1;
+    watchlistRequestIdRef.current = requestId;
+    watchlistActionRef.current = true;
+    setWatchlistBusy(true);
+
+    try {
+      const res = await fetch('/api/watchlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ anime_id: animeId, action }),
+      });
+      const data = await res.json();
+
+      if (watchlistRequestIdRef.current !== requestId) return;
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Could not update the watchlist.');
+      }
+
+      setInWatchlist(action === 'add');
+    } catch (error) {
+      if (watchlistRequestIdRef.current === requestId) {
+        console.error(error);
+      }
+    } finally {
+      if (watchlistRequestIdRef.current === requestId) {
+        watchlistActionRef.current = false;
+        setWatchlistBusy(false);
+      }
+    }
   }
 
   if (loading) {
@@ -283,8 +319,15 @@ export default function AnimeDetailPage() {
                 <PlayIcon /> Start Watching
               </Link>
             )}
-            <button onClick={toggleWatchlist} className="btn btn-secondary" style={{ justifyContent: 'center' }}>
-              {inWatchlist ? '✓ In Watchlist' : '+ Add to Watchlist'}
+            <button
+              type="button"
+              onClick={toggleWatchlist}
+              className="btn btn-secondary watchlist-button"
+              style={{ justifyContent: 'center' }}
+              disabled={watchlistBusy}
+              aria-busy={watchlistBusy}
+            >
+              {watchlistBusy ? 'Updating...' : inWatchlist ? '✓ In Watchlist' : '+ Add to Watchlist'}
             </button>
             {anime.episodes?.length > 0 && (
               <SeriesDownloadConfirm animeId={anime.id} />
