@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 const STATUS_LABELS = {
   1: 'Unknown',
@@ -72,9 +72,11 @@ export default function RequestClient({ initialQuery = '' }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [requestedIds, setRequestedIds] = useState({});
+  const [pendingRequestsById, setPendingRequestsById] = useState({});
   const [expandedIds, setExpandedIds] = useState({});
   const [detailsById, setDetailsById] = useState({});
   const [selectedSeasonsById, setSelectedSeasonsById] = useState({});
+  const requestInFlightRef = useRef(false);
 
   useEffect(() => {
     const incomingQuery = new URLSearchParams(window.location.search).get('q');
@@ -108,6 +110,7 @@ export default function RequestClient({ initialQuery = '' }) {
     setSearched(true);
     setError('');
     setMessage('');
+    setPendingRequestsById({});
 
     try {
       const res = await fetch(`/api/request/search?q=${encodeURIComponent(trimmedQuery)}`, { cache: 'no-store' });
@@ -142,7 +145,12 @@ export default function RequestClient({ initialQuery = '' }) {
     if (isMovieResult(result)) return;
 
     const key = resultKey(result);
+    const wasExpanded = Boolean(expandedIds[key]);
     setExpandedIds(current => ({ ...current, [key]: !current[key] }));
+
+    if (wasExpanded) {
+      clearPendingRequest(key);
+    }
 
     if (detailsById[key]?.loaded || detailsById[key]?.loading) return;
 
@@ -183,6 +191,7 @@ export default function RequestClient({ initialQuery = '' }) {
   }
 
   function toggleSeason(resultId, seasonNumber) {
+    clearPendingRequest(resultId);
     setSelectedSeasonsById(current => {
       const selected = new Set(current[resultId] || []);
 
@@ -200,6 +209,7 @@ export default function RequestClient({ initialQuery = '' }) {
   }
 
   function selectRequestableSeasons(resultId, seasons, includeSpecials = false) {
+    clearPendingRequest(resultId);
     setSelectedSeasonsById(current => ({
       ...current,
       [resultId]: seasons
@@ -209,15 +219,56 @@ export default function RequestClient({ initialQuery = '' }) {
     }));
   }
 
-  async function submitRequest(result, seasons = 'all') {
-    if (requestingId || !canRequest(result)) return;
+  function clearPendingRequest(key) {
+    setPendingRequestsById(current => {
+      if (!current[key]) return current;
+
+      const { [key]: _removed, ...remaining } = current;
+      return remaining;
+    });
+  }
+
+  function beginRequest(result, seasons = 'all') {
+    const key = resultKey(result);
+
+    if (requestInFlightRef.current || requestingId || requestedIds[key] || !canRequest(result)) return;
 
     if (!isMovieResult(result) && Array.isArray(seasons) && seasons.length === 0) {
       setError('Choose at least one season to request.');
       return;
     }
 
+    const seasonSnapshot = Array.isArray(seasons) ? [...seasons] : seasons;
+
+    setError('');
+    setMessage('');
+    setPendingRequestsById(current => ({
+      ...current,
+      [key]: { seasons: seasonSnapshot },
+    }));
+  }
+
+  function confirmRequest(result) {
     const key = resultKey(result);
+    const pendingRequest = pendingRequestsById[key];
+
+    if (!pendingRequest || requestInFlightRef.current || requestingId || requestedIds[key]) return;
+
+    clearPendingRequest(key);
+    submitRequest(result, pendingRequest.seasons);
+  }
+
+  async function submitRequest(result, seasons = 'all') {
+    const key = resultKey(result);
+
+    if (requestInFlightRef.current || requestingId || requestedIds[key] || !canRequest(result)) return;
+
+    if (!isMovieResult(result) && Array.isArray(seasons) && seasons.length === 0) {
+      setError('Choose at least one season to request.');
+      return;
+    }
+
+    requestInFlightRef.current = true;
     setRequestingId(key);
     setError('');
     setMessage('');
@@ -244,6 +295,7 @@ export default function RequestClient({ initialQuery = '' }) {
       console.error(requestError);
       setError(requestError.message || 'Request failed.');
     } finally {
+      requestInFlightRef.current = false;
       setRequestingId(null);
     }
   }
@@ -311,11 +363,14 @@ export default function RequestClient({ initialQuery = '' }) {
             const movie = isMovieResult(result);
             const label = statusLabel(result.status);
             const alreadySent = requestedIds[key];
+            const pendingRequest = pendingRequestsById[key];
             const baseDisabled = requestingId === key || alreadySent || !canRequest(result);
+            const requestStartDisabled = Boolean(requestingId) || alreadySent || !canRequest(result);
+            const confirmDisabled = Boolean(requestingId) || alreadySent || !canRequest(result);
             const expanded = Boolean(expandedIds[key]);
             const details = detailsById[key];
             const selectedSeasons = selectedSeasonsById[key] || [];
-            const selectedDisabled = baseDisabled || selectedSeasons.length === 0;
+            const selectedDisabled = requestStartDisabled || selectedSeasons.length === 0;
 
             return (
               <article key={key} className="request-result-card">
@@ -335,20 +390,41 @@ export default function RequestClient({ initialQuery = '' }) {
                     {result.voteAverage && <span>{Math.round(result.voteAverage * 10)}%</span>}
                   </div>
                   {result.overview && <p>{result.overview}</p>}
-                  <button
-                    className="btn btn-secondary btn-sm request-result-button"
-                    type="button"
-                    disabled={movie ? baseDisabled : requestingId === key}
-                    onClick={() => (movie ? submitRequest(result) : loadDetails(result))}
-                  >
-                    {movie
-                      ? requestingId === key
-                        ? 'Requesting...'
-                        : alreadySent
-                          ? 'Requested'
-                          : 'Request Movie'
-                      : expanded ? 'Hide Seasons' : 'Choose Seasons'}
-                  </button>
+                  {movie && pendingRequest ? (
+                    <div className="request-confirm-actions request-result-confirm-actions">
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        type="button"
+                        disabled={confirmDisabled}
+                        onClick={() => confirmRequest(result)}
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        type="button"
+                        disabled={Boolean(requestingId)}
+                        onClick={() => clearPendingRequest(key)}
+                      >
+                        Undo
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="btn btn-secondary btn-sm request-result-button"
+                      type="button"
+                      disabled={movie ? requestStartDisabled : requestingId === key}
+                      onClick={() => (movie ? beginRequest(result) : loadDetails(result))}
+                    >
+                      {movie
+                        ? requestingId === key
+                          ? 'Requesting...'
+                          : alreadySent
+                            ? 'Requested'
+                            : 'Request Movie'
+                        : expanded ? 'Hide Seasons' : 'Choose Seasons'}
+                    </button>
+                  )}
                 </div>
                 {!movie && expanded && (
                   <div className="request-season-panel">
@@ -379,7 +455,10 @@ export default function RequestClient({ initialQuery = '' }) {
                           <button
                             type="button"
                             className="genre-filter-btn"
-                            onClick={() => setSelectedSeasonsById(current => ({ ...current, [key]: [] }))}
+                            onClick={() => {
+                              clearPendingRequest(key);
+                              setSelectedSeasonsById(current => ({ ...current, [key]: [] }));
+                            }}
                           >
                             Clear
                           </button>
@@ -408,18 +487,39 @@ export default function RequestClient({ initialQuery = '' }) {
                             );
                           })}
                         </div>
-                        <button
-                          className="btn btn-primary btn-sm request-season-submit"
-                          type="button"
-                          disabled={selectedDisabled}
-                          onClick={() => submitRequest(result, selectedSeasons)}
-                        >
-                          {requestingId === key
-                            ? 'Requesting...'
-                            : alreadySent
-                              ? 'Requested'
-                              : requestButtonLabel(details.seasons, selectedSeasons)}
-                        </button>
+                        {pendingRequest ? (
+                          <div className="request-confirm-actions request-season-confirm-actions">
+                            <button
+                              className="btn btn-primary btn-sm"
+                              type="button"
+                              disabled={confirmDisabled}
+                              onClick={() => confirmRequest(result)}
+                            >
+                              Confirm
+                            </button>
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              type="button"
+                              disabled={Boolean(requestingId)}
+                              onClick={() => clearPendingRequest(key)}
+                            >
+                              Undo
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            className="btn btn-primary btn-sm request-season-submit"
+                            type="button"
+                            disabled={selectedDisabled}
+                            onClick={() => beginRequest(result, selectedSeasons)}
+                          >
+                            {requestingId === key
+                              ? 'Requesting...'
+                              : alreadySent
+                                ? 'Requested'
+                                : requestButtonLabel(details.seasons, selectedSeasons)}
+                          </button>
+                        )}
                       </>
                     ) : (
                       <div className="request-season-error">No seasons were returned by Seerr for this title.</div>

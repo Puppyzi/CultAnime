@@ -1542,6 +1542,12 @@ textarea.form-input { resize: vertical; min-height: 70px; }
 .request-result-button {
   margin-top: auto;
 }
+.request-confirm-actions {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+}
+.request-result-confirm-actions {
+  margin-top: auto;
+}
 .request-season-panel {
   grid-column: 1 / -1;
   border-top: 1px solid var(--border);
@@ -1601,8 +1607,12 @@ textarea.form-input { resize: vertical; min-height: 70px; }
 .request-season-submit {
   margin-top: 0.65rem;
 }
+.request-season-confirm-actions {
+  margin-top: 0.65rem;
+}
 .request-result-button:disabled,
 .request-season-submit:disabled,
+.request-confirm-actions .btn:disabled,
 .request-search-form .btn:disabled {
   opacity: 0.55; cursor: default; transform: none; box-shadow: none;
 }
