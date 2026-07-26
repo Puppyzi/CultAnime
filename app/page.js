@@ -10,7 +10,9 @@ export default function HomePage() {
   const [history, setHistory] = useState([]);
   const [featuredIndex, setFeaturedIndex] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [removingEpisodeIds, setRemovingEpisodeIds] = useState({});
   const heroSwipeRef = useRef({ active: false, startX: 0, startY: 0 });
+  const removingEpisodeIdsRef = useRef(new Set());
 
   useEffect(() => {
     async function load() {
@@ -92,6 +94,36 @@ export default function HomePage() {
 
   function handleHeroPointerCancel() {
     heroSwipeRef.current = { active: false, startX: 0, startY: 0 };
+  }
+
+  async function removeContinueWatching(episodeId) {
+    if (removingEpisodeIdsRef.current.has(episodeId)) return;
+
+    removingEpisodeIdsRef.current.add(episodeId);
+    setRemovingEpisodeIds(current => ({ ...current, [episodeId]: true }));
+
+    try {
+      const res = await fetch('/api/history', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ episode_id: episodeId }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Could not remove this item from Continue Watching.');
+      }
+
+      setHistory(current => current.filter(item => item.episode_id !== episodeId));
+    } catch (error) {
+      console.error(error);
+    } finally {
+      removingEpisodeIdsRef.current.delete(episodeId);
+      setRemovingEpisodeIds(current => {
+        const { [episodeId]: _removed, ...remaining } = current;
+        return remaining;
+      });
+    }
   }
 
   if (loading) {
@@ -177,7 +209,12 @@ export default function HomePage() {
               </div>
               <ScrollRow>
                 {history.map(h => (
-                  <ContinueWatchingCard key={h.id} item={h} />
+                  <ContinueWatchingCard
+                    key={h.id}
+                    item={h}
+                    removing={Boolean(removingEpisodeIds[h.episode_id])}
+                    onRemove={() => removeContinueWatching(h.episode_id)}
+                  />
                 ))}
               </ScrollRow>
             </section>
@@ -224,4 +261,3 @@ export default function HomePage() {
     </>
   );
 }
-

@@ -57,7 +57,7 @@ export default function WatchlistPage() {
             const statusLabel = mediaStatusBadgeLabel(w);
 
             return (
-              <div key={w.anime_id} className="anime-card" style={{ position: 'relative' }}>
+              <div key={w.anime_id} className="anime-card">
                 <Link href={`/anime/${w.anime_id}`}>
                   <div className="anime-card-image-wrap">
                     <img className="anime-card-image" src={w.cover_image} alt={w.title} />
@@ -77,8 +77,12 @@ export default function WatchlistPage() {
                     </div>
                   </div>
                 </Link>
-                <button onClick={() => remove(w.anime_id)}
-                  style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', background: 'rgba(0,0,0,0.7)', borderRadius: '50%', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', border: '1px solid var(--border)' }}>
+                <button
+                  className="card-remove-button"
+                  type="button"
+                  onClick={() => remove(w.anime_id)}
+                  aria-label={`Remove ${w.title} from Watchlist`}
+                >
                   <CloseIcon />
                 </button>
               </div>

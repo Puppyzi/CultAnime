@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { mediaFormatLabel } from '../lib/media-format';
 import { mediaStatusBadgeLabel } from '../lib/media-status';
-import { PlayIcon, StarIcon } from './Icons';
+import { CloseIcon, PlayIcon, StarIcon } from './Icons';
 
 // Plays the card flip-out animation before navigating.
 // The destination route is prefetched on hover and at flip start so the
@@ -58,7 +58,7 @@ export function AnimeCard({ anime }) {
   );
 }
 
-export function ContinueWatchingCard({ item }) {
+export function ContinueWatchingCard({ item, onRemove, removing = false }) {
   const href = `/watch/${item.anime_id}/${item.episode_number}`;
   const { isFlipping, handleClick, handleMouseEnter } = useFlipNavigation(href);
   const formatLabel = mediaFormatLabel(item.format);
@@ -66,28 +66,47 @@ export function ContinueWatchingCard({ item }) {
     ? Math.min(100, Math.max(0, (item.progress / item.duration) * 100))
     : 0;
 
+  function handleRemove(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    onRemove?.();
+  }
+
   return (
-    <a href={href} onClick={handleClick} onMouseEnter={handleMouseEnter} className={`anime-card ${isFlipping ? 'card-flip-out' : ''}`}>
-      <div className="anime-card-image-wrap">
-        <img className="anime-card-image" src={item.cover_image || '/placeholder.png'} alt={item.title} />
-        {formatLabel && (
-          <div className="anime-card-badge">
-            <span className="badge-format">{formatLabel}</span>
+    <div className={`anime-card continue-watching-card ${isFlipping ? 'card-flip-out' : ''}`}>
+      <a href={href} onClick={handleClick} onMouseEnter={handleMouseEnter} className="continue-watching-card-link">
+        <div className="anime-card-image-wrap">
+          <img className="anime-card-image" src={item.cover_image || '/placeholder.png'} alt={item.title} />
+          {formatLabel && (
+            <div className="anime-card-badge">
+              <span className="badge-format">{formatLabel}</span>
+            </div>
+          )}
+          {item.duration > 0 && (
+            <div className="card-progress">
+              <div className="card-progress-bar" style={{ width: `${progressPercent}%` }} />
+            </div>
+          )}
+          <div className="anime-card-overlay">
+            <span className="btn btn-primary btn-sm"><PlayIcon /> Continue</span>
           </div>
-        )}
-        {item.duration > 0 && (
-          <div className="card-progress">
-            <div className="card-progress-bar" style={{ width: `${progressPercent}%` }} />
-          </div>
-        )}
-        <div className="anime-card-overlay">
-          <span className="btn btn-primary btn-sm"><PlayIcon /> Continue</span>
         </div>
-      </div>
-      <div className="anime-card-info">
-        <div className="anime-card-title">{item.title}</div>
-        <div className="anime-card-meta"><span>EP {item.episode_number}</span></div>
-      </div>
-    </a>
+        <div className="anime-card-info">
+          <div className="anime-card-title">{item.title}</div>
+          <div className="anime-card-meta"><span>EP {item.episode_number}</span></div>
+        </div>
+      </a>
+      {onRemove && (
+        <button
+          className="card-remove-button"
+          type="button"
+          onClick={handleRemove}
+          disabled={removing}
+          aria-label={`Remove ${item.title} from Continue Watching`}
+        >
+          <CloseIcon />
+        </button>
+      )}
+    </div>
   );
 }

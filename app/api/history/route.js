@@ -46,3 +46,31 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+export async function DELETE(request) {
+  let body;
+
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
+  }
+
+  const episodeId = Number(body?.episode_id);
+  if (!Number.isInteger(episodeId) || episodeId <= 0) {
+    return NextResponse.json({ error: 'A valid episode ID is required.' }, { status: 400 });
+  }
+
+  try {
+    const sessionId = await getSessionId();
+    const db = getDb();
+
+    db.prepare('DELETE FROM watch_history WHERE session_id = ? AND episode_id = ?').run(sessionId, episodeId);
+
+    const response = NextResponse.json({ success: true });
+    response.cookies.set(createSessionCookie(sessionId, request));
+    return response;
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
