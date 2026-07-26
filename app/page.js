@@ -5,6 +5,19 @@ import { mediaFormatLabel } from '../lib/media-format';
 import ScrollRow from '../components/ScrollRow';
 import { AnimeCard, ContinueWatchingCard } from '../components/AnimeCard';
 import { PlayIcon, StarIcon, FlameIcon, FilmIcon } from '../components/Icons';
+
+function SidebarPoster({ anime }) {
+  if (!anime.cover_image) {
+    return (
+      <span className="sidebar-poster-placeholder" aria-hidden="true">
+        <FilmIcon />
+      </span>
+    );
+  }
+
+  return <img src={anime.cover_image} alt={anime.title} />;
+}
+
 export default function HomePage() {
   const [anime, setAnime] = useState([]);
   const [history, setHistory] = useState([]);
@@ -46,6 +59,7 @@ export default function HomePage() {
   }, [anime.length]);
 
   const popular = [...anime].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  const recentlyAdded = anime.slice(0, 3);
   const featured = anime[featuredIndex] || anime[0] || null;
   const featuredFormatLabel = featured ? mediaFormatLabel(featured.format) : '';
   const featuredHistory = featured ? history.find(h => h.anime_id === featured.id) : null;
@@ -222,40 +236,44 @@ export default function HomePage() {
 
           <section className="section">
             <div className="section-header">
-              <h2>Recently Added</h2>
-              <Link href="/browse">View All →</Link>
+              <h2>All Anime</h2>
+              <Link href="/browse">Browse &amp; Filter →</Link>
             </div>
-            <ScrollRow>
-              {anime.slice(0, 15).map(a => <AnimeCard key={a.id} anime={a} />)}
-            </ScrollRow>
+            <div className="anime-grid">
+              {anime.map(a => <AnimeCard key={a.id} anime={a} />)}
+            </div>
           </section>
 
-          {popular.length > 0 && (
-            <section className="section">
-              <div className="section-header">
-                <h2>Top Rated</h2>
-                <Link href="/browse?sort=rating">View All →</Link>
-              </div>
-              <ScrollRow>
-                {popular.slice(0, 15).map(a => <AnimeCard key={a.id} anime={a} />)}
-              </ScrollRow>
-            </section>
-          )}
         </div>
 
         {/* AnimeKai-style sidebar */}
         <aside className="home-sidebar">
-          <div className="sidebar-title"><FlameIcon style={{ color: '#fb923c' }} /> Top Anime</div>
-          {popular.slice(0, 10).map((a, i) => (
-            <Link key={a.id} href={`/anime/${a.id}`} className="sidebar-item">
-              <span className={`sidebar-rank ${i < 3 ? 'top' : ''}`}>{String(i + 1).padStart(2, '0')}</span>
-              <img src={a.cover_image} alt={a.title} />
-              <div className="sidebar-info">
-                <h4>{a.title}</h4>
-                <p>{a.episodes_total ? `${a.episodes_total} EP` : ''}{a.rating ? ` • ${a.rating}%` : ''}</p>
-              </div>
-            </Link>
-          ))}
+          <section className="sidebar-section">
+            <div className="sidebar-title"><FilmIcon style={{ color: 'var(--accent)' }} /> Recently Added</div>
+            {recentlyAdded.map(a => (
+              <Link key={a.id} href={`/anime/${a.id}`} className="sidebar-item">
+                <SidebarPoster anime={a} />
+                <div className="sidebar-info">
+                  <h4>{a.title}</h4>
+                  <p>{a.episodes_total ? `${a.episodes_total} EP` : ''}{a.year ? ` / ${a.year}` : ''}{a.rating ? ` • ${a.rating}%` : ''}</p>
+                </div>
+              </Link>
+            ))}
+          </section>
+
+          <section className="sidebar-section">
+            <div className="sidebar-title"><FlameIcon style={{ color: '#fb923c' }} /> Top Anime</div>
+            {popular.slice(0, 10).map((a, i) => (
+              <Link key={a.id} href={`/anime/${a.id}`} className="sidebar-item">
+                <span className={`sidebar-rank ${i < 3 ? 'top' : ''}`}>{String(i + 1).padStart(2, '0')}</span>
+                <SidebarPoster anime={a} />
+                <div className="sidebar-info">
+                  <h4>{a.title}</h4>
+                  <p>{a.episodes_total ? `${a.episodes_total} EP` : ''}{a.year ? ` / ${a.year}` : ''}{a.rating ? ` • ${a.rating}%` : ''}</p>
+                </div>
+              </Link>
+            ))}
+          </section>
         </aside>
       </div>
     </>

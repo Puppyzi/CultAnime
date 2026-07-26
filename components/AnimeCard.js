@@ -38,7 +38,13 @@ export function AnimeCard({ anime }) {
   return (
     <a href={href} onClick={handleClick} onMouseEnter={handleMouseEnter} className={`anime-card ${isFlipping ? 'card-flip-out' : ''}`}>
       <div className="anime-card-image-wrap">
-        <img className="anime-card-image" src={anime.cover_image || '/placeholder.png'} alt={anime.title} />
+        <img
+          className="anime-card-image"
+          src={anime.cover_image || '/placeholder.png'}
+          alt={anime.title}
+          loading="lazy"
+          decoding="async"
+        />
         <div className="anime-card-badge">
           {formatLabel && <span className="badge-format">{formatLabel}</span>}
           {anime.episode_count > 0 && <span className="badge-eps">{anime.episode_count} EP</span>}

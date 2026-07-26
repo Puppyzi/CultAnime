@@ -35,7 +35,8 @@ export async function GET(request) {
     const validSorts = ['created_at', 'title', 'rating', 'year'];
     const sortCol = validSorts.includes(sort) ? sort : 'created_at';
     const sortOrder = order === 'ASC' ? 'ASC' : 'DESC';
-    query += ` ORDER BY ${sortCol} ${sortOrder} LIMIT ? OFFSET ?`;
+    const tieBreaker = sortCol === 'created_at' ? `, id ${sortOrder}` : '';
+    query += ` ORDER BY ${sortCol} ${sortOrder}${tieBreaker} LIMIT ? OFFSET ?`;
 
     const total = db.prepare(countQuery).get(...queryParams)?.total || 0;
     const anime = db.prepare(query).all(...queryParams, limit, offset);
