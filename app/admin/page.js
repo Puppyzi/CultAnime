@@ -789,7 +789,7 @@ export default function AdminPage() {
                 <select className="form-input" value={form.status || ''} onChange={e => setForm({ ...form, status: e.target.value })}>
                   <option value="">Select...</option>
                   <option value="FINISHED">Finished</option>
-                  <option value="RELEASING">Releasing</option>
+                  <option value="RELEASING">Airing</option>
                   <option value="NOT_YET_RELEASED">Not Yet Released</option>
                 </select>
               </div>
