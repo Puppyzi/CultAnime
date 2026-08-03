@@ -9,6 +9,7 @@ const ALL_GENRES = ['Action','Adventure','Comedy','Drama','Fantasy','Horror','Me
 function BrowseContent() {
   const searchParams = useSearchParams();
   const [anime, setAnime] = useState([]);
+  const [watchlistIds, setWatchlistIds] = useState(() => new Set());
   const [search, setSearch] = useState('');
   const [genre, setGenre] = useState(searchParams.get('genre') || '');
   const [sort, setSort] = useState(searchParams.get('sort') || 'created_at');
@@ -37,6 +38,43 @@ function BrowseContent() {
     }
     load();
   }, [genre, sort, search]);
+
+  useEffect(() => {
+    async function loadWatchlist() {
+      try {
+        const res = await fetch('/api/watchlist');
+        const data = await res.json();
+        setWatchlistIds(new Set((data.watchlist || []).map(item => String(item.anime_id))));
+      } catch (error) {
+        console.error('Watchlist state failed:', error);
+      }
+    }
+
+    loadWatchlist();
+  }, []);
+
+  async function updateWatchlist(animeId, shouldAdd) {
+    const res = await fetch('/api/watchlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ anime_id: animeId, action: shouldAdd ? 'add' : 'remove' }),
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Could not update the watchlist.');
+    }
+
+    setWatchlistIds(current => {
+      const next = new Set(current);
+      if (shouldAdd) {
+        next.add(String(animeId));
+      } else {
+        next.delete(String(animeId));
+      }
+      return next;
+    });
+  }
 
   return (
     <div className="browse-page">
@@ -84,7 +122,14 @@ function BrowseContent() {
         </div>
       ) : (
         <div className="anime-grid">
-          {anime.map(a => <AnimeCard key={a.id} anime={a} />)}
+          {anime.map(a => (
+            <AnimeCard
+              key={a.id}
+              anime={a}
+              inWatchlist={watchlistIds.has(String(a.id))}
+              onWatchlistChange={updateWatchlist}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -98,4 +143,3 @@ export default function BrowsePage() {
     </Suspense>
   );
 }
-

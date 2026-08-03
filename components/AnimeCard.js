@@ -1,9 +1,9 @@
 'use client';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { mediaFormatLabel } from '../lib/media-format';
 import { mediaStatusBadgeLabel } from '../lib/media-status';
-import { CloseIcon, PlayIcon, StarIcon } from './Icons';
+import { BookmarkIcon, CloseIcon, PlayIcon, StarIcon } from './Icons';
 
 // Plays the card flip-out animation before navigating.
 // The destination route is prefetched on hover and at flip start so the
@@ -29,38 +29,80 @@ function useFlipNavigation(href) {
   return { isFlipping, handleClick, handleMouseEnter };
 }
 
-export function AnimeCard({ anime }) {
+export function AnimeCard({ anime, inWatchlist = false, onWatchlistChange }) {
   const href = `/anime/${anime.id}`;
   const { isFlipping, handleClick, handleMouseEnter } = useFlipNavigation(href);
   const formatLabel = mediaFormatLabel(anime.format);
   const statusLabel = mediaStatusBadgeLabel(anime);
+  const [watchlistBusy, setWatchlistBusy] = useState(false);
+  const watchlistActionRef = useRef(false);
+
+  async function handleWatchlistClick(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!onWatchlistChange || watchlistActionRef.current) return;
+
+    watchlistActionRef.current = true;
+    setWatchlistBusy(true);
+
+    try {
+      await onWatchlistChange(anime.id, !inWatchlist);
+    } catch (error) {
+      console.error('Watchlist update failed:', error);
+    } finally {
+      watchlistActionRef.current = false;
+      setWatchlistBusy(false);
+    }
+  }
 
   return (
-    <a href={href} onClick={handleClick} onMouseEnter={handleMouseEnter} className={`anime-card ${isFlipping ? 'card-flip-out' : ''}`}>
+    <div className={`anime-card ${isFlipping ? 'card-flip-out' : ''}`}>
       <div className="anime-card-image-wrap">
-        <img
-          className="anime-card-image"
-          src={anime.cover_image || '/placeholder.png'}
-          alt={anime.title}
-          loading="lazy"
-          decoding="async"
-        />
+        <a href={href} onClick={handleClick} onMouseEnter={handleMouseEnter} className="anime-card-image-link">
+          <img
+            className="anime-card-image"
+            src={anime.cover_image || '/placeholder.png'}
+            alt={anime.title}
+            loading="lazy"
+            decoding="async"
+          />
+        </a>
         <div className="anime-card-badge">
           {formatLabel && <span className="badge-format">{formatLabel}</span>}
           {anime.episode_count > 0 && <span className="badge-eps">{anime.episode_count} EP</span>}
           {statusLabel && <span className="badge-status">{statusLabel}</span>}
         </div>
         <div className="anime-card-overlay">
-          <span className="btn btn-primary btn-sm"><PlayIcon /> Watch</span>
+          <div className="anime-card-action-row">
+            {onWatchlistChange && (
+              <button
+                className={`watchlist-icon-button anime-card-watchlist-button${inWatchlist ? ' active' : ''}`}
+                type="button"
+                onClick={handleWatchlistClick}
+                disabled={watchlistBusy}
+                aria-label={inWatchlist ? `Remove ${anime.title} from Watchlist` : `Add ${anime.title} to Watchlist`}
+                aria-pressed={inWatchlist}
+                title={inWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
+              >
+                <BookmarkIcon />
+              </button>
+            )}
+            <a href={href} onClick={handleClick} onMouseEnter={handleMouseEnter} className="btn btn-primary btn-sm anime-card-watch-action">
+              <PlayIcon /> Watch
+            </a>
+          </div>
         </div>
       </div>
-      <div className="anime-card-info">
-        <div className="anime-card-title">{anime.title}</div>
-        <div className="anime-card-meta">
-          {anime.rating && <span className="anime-card-rating"><StarIcon /> {anime.rating}%</span>}
+      <a href={href} onClick={handleClick} onMouseEnter={handleMouseEnter} className="anime-card-link">
+        <div className="anime-card-info">
+          <div className="anime-card-title">{anime.title}</div>
+          <div className="anime-card-meta">
+            {anime.rating && <span className="anime-card-rating"><StarIcon /> {anime.rating}%</span>}
+          </div>
         </div>
-      </div>
-    </a>
+      </a>
+    </div>
   );
 }
 

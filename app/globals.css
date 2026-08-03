@@ -332,6 +332,9 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
   position: relative; border-radius: var(--radius-md); overflow: hidden;
   background: var(--bg-card); transition: all var(--transition-slow); cursor: pointer;
 }
+.anime-card-link,
+.anime-card-image-link { display: block; color: inherit; }
+.anime-card-image-link { height: 100%; }
 .anime-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 0 16px rgba(192,96,255,0.15);
@@ -373,9 +376,17 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
   position: absolute; inset: 0;
   background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 60%);
   opacity: 0; transition: opacity var(--transition);
-  display: flex; align-items: flex-end; justify-content: center; padding: 0.75rem;
+  z-index: 2; display: flex; align-items: flex-end; justify-content: center; padding: 0.75rem;
+  pointer-events: none;
 }
-.anime-card:hover .anime-card-overlay { opacity: 1; }
+.anime-card:hover .anime-card-overlay,
+.anime-card:focus-within .anime-card-overlay { opacity: 1; }
+.anime-card-action-row { position: relative; }
+.anime-card-watch-action,
+.anime-card-watchlist-button { pointer-events: auto; }
+.anime-card-overlay .anime-card-watchlist-button {
+  position: absolute; right: calc(100% + 0.35rem); bottom: 0;
+}
 .card-progress {
   position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
   background: rgba(255,255,255,0.1);
@@ -1813,6 +1824,7 @@ textarea.form-input { resize: vertical; min-height: 70px; }
   .anime-detail-stats, .genre-tags { justify-content: center; }
   .anime-card { flex: 0 0 130px; }
   .anime-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .anime-card-overlay .anime-card-watchlist-button { display: none; }
   .airing-header { flex-direction: column; align-items: flex-start; }
   .airing-header-actions { align-items: flex-start; width: 100%; }
   .airing-sort-menu { left: 0; right: auto; }
@@ -1835,6 +1847,32 @@ textarea.form-input { resize: vertical; min-height: 70px; }
   .request-loading-grid { grid-template-columns: 1fr; }
   .request-result-card { grid-template-columns: 76px minmax(0, 1fr); }
   .request-result-poster { width: 76px; }
+}
+
+/* Keep the two card actions together throughout the compact layout. */
+@media (max-width: 1024px) {
+  .anime-card-action-row {
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-direction: row; flex-wrap: nowrap;
+    gap: 0.35rem; max-width: 100%;
+  }
+  .anime-card-overlay .anime-card-watchlist-button {
+    position: static; right: auto; bottom: auto;
+    display: inline-flex; flex: 0 0 1.75rem;
+  }
+}
+
+/* Tight card widths need a slightly smaller, but still side-by-side, action group. */
+@media (max-width: 768px), (max-width: 1024px) and (orientation: landscape) {
+  .anime-card-overlay { padding: 0.5rem; }
+  .anime-card-overlay .anime-card-watchlist-button {
+    flex-basis: 1.65rem; width: 1.65rem; height: 1.65rem;
+  }
+  .anime-card-overlay .anime-card-watchlist-button svg { width: 0.85rem; height: 0.85rem; }
+  .anime-card-overlay .anime-card-watch-action {
+    gap: 0.3rem; padding: 0.3rem 0.55rem;
+    font-size: 0.7rem; white-space: nowrap;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

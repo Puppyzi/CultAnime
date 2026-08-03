@@ -1,7 +1,8 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { mediaFormatLabel } from '../lib/media-format';
+import { shouldShowReleasingBadge } from '../lib/media-status';
 import ScrollRow from '../components/ScrollRow';
 import { AnimeCard, ContinueWatchingCard } from '../components/AnimeCard';
 import { PlayIcon, StarIcon, FlameIcon, FilmIcon } from '../components/Icons';
@@ -19,9 +20,31 @@ function SidebarPoster({ anime }) {
   return <img src={anime.cover_image} alt={anime.title} />;
 }
 
+function getHeroAnime(anime, history) {
+  const airingAnime = anime.filter(shouldShowReleasingBadge);
+
+  // When nothing is airing, retain the full-library fallback requested for
+  // the hero instead of filtering it down to a user's watch history.
+  if (airingAnime.length === 0) return anime;
+
+  const animeById = new Map(anime.map(item => [String(item.id), item]));
+  const watchedAnime = history
+    .map(item => animeById.get(String(item.anime_id)))
+    .filter(Boolean);
+  const seenIds = new Set();
+
+  return [...airingAnime, ...watchedAnime].filter(item => {
+    const id = String(item.id);
+    if (seenIds.has(id)) return false;
+    seenIds.add(id);
+    return true;
+  });
+}
+
 export default function HomePage() {
   const [anime, setAnime] = useState([]);
   const [history, setHistory] = useState([]);
+  const [watchlistIds, setWatchlistIds] = useState(() => new Set());
   const [featuredIndex, setFeaturedIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [removingEpisodeIds, setRemovingEpisodeIds] = useState({});
@@ -31,17 +54,22 @@ export default function HomePage() {
   useEffect(() => {
     async function load() {
       try {
-        const [animeRes, historyRes] = await Promise.all([
+        const [animeRes, historyRes, watchlistRes] = await Promise.all([
           fetch('/api/anime?sort=created_at&order=DESC&limit=500'),
           fetch('/api/history'),
+          fetch('/api/watchlist'),
         ]);
         const animeData = await animeRes.json();
         const historyData = await historyRes.json();
+        const watchlistData = await watchlistRes.json();
         const list = animeData.anime || [];
+        const browserHistory = historyData.history || [];
+        const heroAnime = getHeroAnime(list, browserHistory);
         setAnime(list);
-        setHistory(historyData.history || []);
-        if (list.length > 0) {
-          setFeaturedIndex(Math.floor(Math.random() * list.length));
+        setHistory(browserHistory);
+        setWatchlistIds(new Set((watchlistData.watchlist || []).map(item => String(item.anime_id))));
+        if (heroAnime.length > 0) {
+          setFeaturedIndex(Math.floor(Math.random() * heroAnime.length));
         }
       } catch (e) { console.error(e); }
       setLoading(false);
@@ -49,37 +77,48 @@ export default function HomePage() {
     load();
   }, []);
 
+  const heroAnime = useMemo(() => getHeroAnime(anime, history), [anime, history]);
+
   useEffect(() => {
-    if (anime.length <= 1) return;
+    if (heroAnime.length === 0) {
+      setFeaturedIndex(0);
+      return;
+    }
+
+    setFeaturedIndex(current => current % heroAnime.length);
+  }, [heroAnime.length]);
+
+  useEffect(() => {
+    if (heroAnime.length <= 1) return;
 
     const intervalId = setInterval(() => {
       goToNextHero();
     }, 6500);
 
     return () => clearInterval(intervalId);
-  }, [anime.length]);
+  }, [heroAnime.length]);
 
   const popular = [...anime].sort((a, b) => (b.rating || 0) - (a.rating || 0));
   const recentlyAdded = anime.slice(0, 3);
-  const featured = anime[featuredIndex] || anime[0] || null;
+  const featured = heroAnime[featuredIndex] || heroAnime[0] || null;
   const featuredFormatLabel = featured ? mediaFormatLabel(featured.format) : '';
   const featuredHistory = featured ? history.find(h => h.anime_id === featured.id) : null;
   const featuredWatchHref = featured
     ? `/watch/${featured.id}/${featuredHistory?.episode_number || 1}`
     : null;
-  const canSwipeHero = anime.length > 1;
+  const canSwipeHero = heroAnime.length > 1;
 
   function goToHero(index) {
-    if (anime.length === 0) return;
-    setFeaturedIndex(((index % anime.length) + anime.length) % anime.length);
+    if (heroAnime.length === 0) return;
+    setFeaturedIndex(((index % heroAnime.length) + heroAnime.length) % heroAnime.length);
   }
 
   function goToPreviousHero() {
-    setFeaturedIndex(current => (current - 1 + anime.length) % anime.length);
+    setFeaturedIndex(current => (current - 1 + heroAnime.length) % heroAnime.length);
   }
 
   function goToNextHero() {
-    setFeaturedIndex(current => (current + 1) % anime.length);
+    setFeaturedIndex(current => (current + 1) % heroAnime.length);
   }
 
   function handleHeroPointerDown(e) {
@@ -141,6 +180,29 @@ export default function HomePage() {
     }
   }
 
+  async function updateWatchlist(animeId, shouldAdd) {
+    const res = await fetch('/api/watchlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ anime_id: animeId, action: shouldAdd ? 'add' : 'remove' }),
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Could not update the watchlist.');
+    }
+
+    setWatchlistIds(current => {
+      const next = new Set(current);
+      if (shouldAdd) {
+        next.add(String(animeId));
+      } else {
+        next.delete(String(animeId));
+      }
+      return next;
+    });
+  }
+
   if (loading) {
     return (
       <div>
@@ -196,9 +258,9 @@ export default function HomePage() {
           </div>
           {canSwipeHero && (
             <>
-              {anime.length <= 12 && (
+              {heroAnime.length <= 12 && (
                 <div className="hero-carousel-dots" aria-label="Featured anime slides">
-                  {anime.map((item, index) => (
+                  {heroAnime.map((item, index) => (
                     <button
                       key={item.id}
                       type="button"
@@ -246,7 +308,14 @@ export default function HomePage() {
               <Link href="/browse">Browse &amp; Filter →</Link>
             </div>
             <div className="anime-grid home-anime-grid">
-              {anime.map(a => <AnimeCard key={a.id} anime={a} />)}
+              {anime.map(a => (
+                <AnimeCard
+                  key={a.id}
+                  anime={a}
+                  inWatchlist={watchlistIds.has(String(a.id))}
+                  onWatchlistChange={updateWatchlist}
+                />
+              ))}
             </div>
           </section>
 
