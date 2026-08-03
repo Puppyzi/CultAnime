@@ -5,6 +5,7 @@ import { mediaFormatLabel } from '../lib/media-format';
 import ScrollRow from '../components/ScrollRow';
 import { AnimeCard, ContinueWatchingCard } from '../components/AnimeCard';
 import { PlayIcon, StarIcon, FlameIcon, FilmIcon } from '../components/Icons';
+import MobileDiscoveryRows from '../components/MobileDiscoveryRows';
 
 function SidebarPoster({ anime }) {
   if (!anime.cover_image) {
@@ -233,6 +234,11 @@ export default function HomePage() {
               </ScrollRow>
             </section>
           )}
+
+          <MobileDiscoveryRows
+            recentlyAdded={recentlyAdded}
+            popular={popular.slice(0, 10)}
+          />
 
           <section className="section">
             <div className="section-header">

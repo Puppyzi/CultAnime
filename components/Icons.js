@@ -48,6 +48,14 @@ export function SearchIcon(props) {
   );
 }
 
+export function MenuIcon(props) {
+  return (
+    <SvgIcon {...props}>
+      <path d="M4 7h16v2H4V7zm0 4h16v2H4v-2zm0 4h16v2H4v-2z" />
+    </SvgIcon>
+  );
+}
+
 export function CloseIcon(props) {
   return (
     <SvgIcon {...props}>

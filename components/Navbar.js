@@ -1,27 +1,59 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { SearchIcon } from './Icons';
+import { usePathname } from 'next/navigation';
+import { CloseIcon, MenuIcon, SearchIcon } from './Icons';
 
 export default function Navbar() {
   const pathname = usePathname();
-  const router = useRouter();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const navRef = useRef(null);
+  const menuButtonRef = useRef(null);
+  const firstNavLinkRef = useRef(null);
+  const shouldFocusFirstNavLinkRef = useRef(false);
   const searchRef = useRef(null);
   const debounceRef = useRef(null);
 
   useEffect(() => {
-    function handleClick(e) {
+    function handlePointerDown(e) {
       if (searchRef.current && !searchRef.current.contains(e.target)) {
         setShowDropdown(false);
       }
+      if (navRef.current && !navRef.current.contains(e.target)) {
+        setIsMenuOpen(false);
+      }
     }
-    document.addEventListener('pointerdown', handleClick);
-    return () => document.removeEventListener('pointerdown', handleClick);
+
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') {
+        const menuWasOpen = navRef.current?.querySelector('.navbar-links.is-open');
+        setShowDropdown(false);
+        setIsMenuOpen(false);
+        if (menuWasOpen) menuButtonRef.current?.focus();
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
+
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (isMenuOpen && shouldFocusFirstNavLinkRef.current) {
+      firstNavLinkRef.current?.focus();
+    }
+    shouldFocusFirstNavLinkRef.current = false;
+  }, [isMenuOpen]);
 
   useEffect(() => {
     if (!query.trim()) { setResults([]); setShowDropdown(false); return; }
@@ -34,6 +66,8 @@ export default function Navbar() {
         setShowDropdown(true);
       } catch (e) { console.error(e); }
     }, 300);
+
+    return () => clearTimeout(debounceRef.current);
   }, [query]);
 
   const navLinks = [
@@ -53,19 +87,35 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="navbar">
+    <nav className="navbar" ref={navRef}>
       <Link href="/" className="navbar-logo">
         <span>cult</span><span className="navbar-logo-anime">Anime</span>
       </Link>
-      <div className="navbar-links">
+      <div
+        id="navbar-main-links"
+        className={`navbar-links${isMenuOpen ? ' is-open' : ''}`}
+        aria-label="Primary navigation"
+      >
         {navLinks.map(l => (
           l.reload ? (
-            <a key={l.href} href={l.href} className={isActive(l) ? 'active' : ''}>
+            <a
+              key={l.href}
+              href={l.href}
+              className={isActive(l) ? 'active' : ''}
+              aria-current={isActive(l) ? 'page' : undefined}
+              onClick={() => setIsMenuOpen(false)}
+            >
               {l.label}
             </a>
           ) : (
-            <Link key={l.href} href={l.href}
-              className={isActive(l) ? 'active' : ''}>
+            <Link
+              key={l.href}
+              ref={l.href === '/' ? firstNavLinkRef : undefined}
+              href={l.href}
+              className={isActive(l) ? 'active' : ''}
+              aria-current={isActive(l) ? 'page' : undefined}
+              onClick={() => setIsMenuOpen(false)}
+            >
               {l.label}
             </Link>
           )
@@ -74,25 +124,51 @@ export default function Navbar() {
       <div className="navbar-search" ref={searchRef}>
         <span className="search-icon"><SearchIcon /></span>
         <input
-          type="text" placeholder="Search anime..."
+          type="text" placeholder="Search anime..." aria-label="Search anime"
           value={query} onChange={e => setQuery(e.target.value)}
-          onFocus={() => results.length > 0 && setShowDropdown(true)}
+          onFocus={() => {
+            setIsMenuOpen(false);
+            if (results.length > 0) setShowDropdown(true);
+          }}
         />
         {showDropdown && results.length > 0 && (
           <div className="search-dropdown">
             {results.map(a => (
-              <div key={a.id} className="search-result"
-                onClick={() => { router.push(`/anime/${a.id}`); setShowDropdown(false); setQuery(''); }}>
+              <Link
+                key={a.id}
+                href={`/anime/${a.id}`}
+                className="search-result"
+                onClick={() => { setShowDropdown(false); setQuery(''); }}
+              >
                 {a.cover_image && <img src={a.cover_image} alt={a.title} />}
                 <div className="search-result-info">
                   <h4>{a.title}</h4>
                   <p>{a.episodes_total ? `${a.episodes_total} eps` : ''} {a.year ? `• ${a.year}` : ''}</p>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}
       </div>
+      <button
+        ref={menuButtonRef}
+        className="navbar-menu-toggle"
+        type="button"
+        aria-controls="navbar-main-links"
+        aria-expanded={isMenuOpen}
+        aria-label={isMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+        onClick={(event) => {
+          setShowDropdown(false);
+          const openedWithKeyboard = event.detail === 0;
+          setIsMenuOpen(current => {
+            const next = !current;
+            shouldFocusFirstNavLinkRef.current = next && openedWithKeyboard;
+            return next;
+          });
+        }}
+      >
+        {isMenuOpen ? <CloseIcon /> : <MenuIcon />}
+      </button>
     </nav>
   );
 }
