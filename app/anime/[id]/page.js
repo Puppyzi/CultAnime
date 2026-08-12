@@ -50,6 +50,80 @@ function episodeThumbnailUrl(ep, width = 320, height = 180) {
   return `/api/thumbnail/${ep.id}?width=${width}&height=${height}`;
 }
 
+function EpisodeSortDropdown({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = event => !dropdownRef.current?.contains(event.target) && setOpen(false);
+    const closeOnEscape = event => event.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [open]);
+
+  function selectSort(nextValue) {
+    onChange(nextValue);
+    setOpen(false);
+  }
+
+  function handleTriggerKeyDown(event) {
+    if (event.key === 'Escape') setOpen(false);
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      setOpen(true);
+    }
+  }
+
+  function handleOptionKeyDown(event, option) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      selectSort(option);
+    }
+  }
+
+  return (
+    <div className='dropdown-container' ref={dropdownRef}>
+      <div
+        role='button'
+        className='dropdown-trigger'
+        aria-label='Sort'
+        aria-haspopup='listbox'
+        aria-expanded={open}
+        tabIndex={0}
+        onClick={() => setOpen(current => !current)}
+        onKeyDown={handleTriggerKeyDown}
+      >
+        <svg className={'sort-icon' + (value === 'Newest' ? ' base-svg--is-flip' : '')} xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' width='24' height='24' aria-hidden='true'>
+          <path d='M5 4v16m0 0-3-3m3 3 3-3M11 6h10M11 12h7M11 18h4' />
+        </svg>
+        <span className='current-selection'>{value}</span>
+      </div>
+      {open && (
+        <div className='dropdown-content' role='listbox'>
+          <div className='mobile-header'>
+            <h4>Sort</h4>
+            <button type='button' className='close-btn' onClick={() => setOpen(false)} aria-label='Close sort menu'>&times;</button>
+          </div>
+          <div className='scrollable-content'>
+            <div className='options-list'>
+              {['Oldest', 'Newest'].map(option => (
+                <div key={option} role='option' aria-selected={value === option} tabIndex={0} className={'option' + (value === option ? ' active' : '')} onClick={() => selectSort(option)} onKeyDown={event => handleOptionKeyDown(event, option)}>
+                  <span>{option}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function formatBytes(bytes) {
   const size = Number(bytes);
   if (!Number.isFinite(size) || size <= 0) return 'Size unavailable';
@@ -225,6 +299,7 @@ export default function AnimeDetailPage() {
   const [inWatchlist, setInWatchlist] = useState(false);
   const [loading, setLoading] = useState(true);
   const [watchlistBusy, setWatchlistBusy] = useState(false);
+  const [episodeSort, setEpisodeSort] = useState('Oldest');
   const watchlistActionRef = useRef(false);
   const watchlistRequestIdRef = useRef(0);
 
@@ -248,6 +323,7 @@ export default function AnimeDetailPage() {
     watchlistRequestIdRef.current += 1;
     watchlistActionRef.current = false;
     setWatchlistBusy(false);
+    setEpisodeSort('Oldest');
   }, [id]);
 
   async function toggleWatchlist() {
@@ -302,6 +378,9 @@ export default function AnimeDetailPage() {
   if (!anime) return <div className="empty-state"><h3>Anime not found</h3></div>;
 
   const episodeTotal = episodeTotalFor(anime);
+  const displayedEpisodes = episodeSort === 'Newest'
+    ? [...(anime.episodes || [])].reverse()
+    : anime.episodes || [];
 
   return (
     <div>
@@ -357,9 +436,12 @@ export default function AnimeDetailPage() {
 
           {anime.episodes?.length > 0 && (
             <div className="episode-list">
-              <h2>Episodes ({anime.episodes.length})</h2>
+              <div className='episode-list-header'>
+                <h2>Episodes ({anime.episodes.length})</h2>
+                <EpisodeSortDropdown value={episodeSort} onChange={setEpisodeSort} />
+              </div>
               <div className="episode-grid">
-                {anime.episodes.map(ep => {
+                {displayedEpisodes.map(ep => {
                   const meta = episodeMetaText(ep);
 
                   return (

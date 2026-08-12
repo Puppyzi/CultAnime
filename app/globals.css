@@ -145,9 +145,9 @@ input, textarea, select { font-family: inherit; }
   flex: 0 0 auto;
   padding: 0.4rem 0.75rem; border-radius: var(--radius-sm);
   color: var(--text-secondary); font-weight: 500; font-size: 0.82rem;
-  transition: all var(--transition);
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
-.navbar-links a:hover { color: var(--text-primary); }
+.navbar-links a:hover { background-color: rgba(255, 255, 255, 0.15); color: #fff; }
 .navbar-links a.active { color: var(--accent); }
 .navbar-menu-toggle {
   display: none; width: 2.75rem; height: 2.75rem; flex: 0 0 2.75rem;
@@ -484,6 +484,51 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
 /* ---- EPISODE LIST ---- */
 .episode-list { margin-top: 1.5rem; }
 .episode-list h2 { font-size: 1.05rem; font-weight: 700; margin-bottom: 0.75rem; }
+.episode-list-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.75rem; margin-bottom: 0.75rem;
+}
+.episode-list-header h2 { margin-bottom: 0; }
+.dropdown-container { position: relative; display: inline-block; }
+.dropdown-trigger {
+  display: flex; align-items: center; height: 44px; padding: 0 12px;
+  cursor: pointer; color: #8c8c8c; background: transparent;
+  transition: all 0.2s ease; user-select: none;
+}
+.dropdown-trigger:hover,
+.dropdown-trigger:focus-visible {
+  background-color: rgba(255, 255, 255, 0.08); color: #fff; outline: none;
+}
+.sort-icon {
+  width: 24px; height: 24px; margin-right: 8px; fill: none;
+  stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
+  transition: transform 180ms ease;
+}
+.sort-icon.base-svg--is-flip { transform: rotate(180deg); }
+.dropdown-content {
+  position: absolute; top: 100%; right: 0; width: 200px;
+  background-color: #18181b; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+}
+.mobile-header { display: none; }
+.option {
+  padding: 12px 16px; color: var(--text-secondary); font-weight: 400; cursor: pointer;
+  background-color: transparent; transition: background-color 0.2s ease, color 0.2s ease;
+}
+.option:hover,
+.option:focus-visible { background-color: rgba(255, 255, 255, 0.08); color: #fff; outline: none; }
+.option.active { color: #fff; }
+@media (max-width: 768px) {
+  .mobile-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; color: #fff; border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .mobile-header h4 { margin: 0; font-size: 1rem; }
+  .close-btn {
+    padding: 0; border: 0; background: transparent; color: #fff;
+    font-size: 1.5rem; line-height: 1; cursor: pointer;
+  }
+}
 .episode-grid { display: flex; flex-direction: column; gap: 4px; }
 .episode-item {
   display: flex; align-items: center; gap: 0.75rem;
@@ -1778,7 +1823,7 @@ textarea.form-input { resize: vertical; min-height: 70px; }
   .navbar-links.is-open a:nth-child(5) { transition-delay: 100ms; }
   .navbar-links.is-open a:nth-child(6) { transition-delay: 120ms; }
   .navbar-links.is-open a:nth-child(7) { transition-delay: 140ms; }
-  .navbar-links a:hover,
+  .navbar-links a:hover { background-color: rgba(255, 255, 255, 0.15); color: #fff; }
   .navbar-links a.active { background: var(--accent-dim); color: var(--accent); }
   .home-layout { grid-template-columns: 1fr; }
   .home-sidebar { display: none; }
