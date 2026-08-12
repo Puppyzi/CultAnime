@@ -458,7 +458,7 @@ export default function AnimeDetailPage() {
                         {meta && <span className="episode-meta">{meta}</span>}
                         {ep.overview && <span className="episode-overview">{ep.overview}</span>}
                       </span>
-                      <span style={{ color: 'var(--accent)', fontSize: '0.85rem' }}><PlayIcon /></span>
+                      <span className='episode-play-icon'><PlayIcon /></span>
                     </Link>
                   );
                 })}

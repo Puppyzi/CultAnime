@@ -37,7 +37,7 @@
   --transition-slow: 0.3s ease;
 }
 
-html { scroll-behavior: smooth; }
+html { color-scheme: dark; scroll-behavior: smooth; }
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -59,11 +59,6 @@ input, textarea, select { font-family: inherit; }
   display: inline-block; vertical-align: -0.125em;
   flex: 0 0 auto;
 }
-
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
 /* ---- NAVBAR ---- */
 .navbar {
@@ -557,6 +552,11 @@ main { padding-top: var(--nav-height); min-height: 100vh; }
 .episode-detail-item {
   align-items: flex-start; min-height: 104px; padding: 0.75rem;
 }
+.episode-play-icon {
+  display: inline-flex; color: var(--accent); font-size: 0.85rem;
+  transition: transform 750ms ease;
+}
+.episode-detail-item:hover .episode-play-icon { transform: rotate(360deg); }
 .episode-thumbnail {
   width: 144px; aspect-ratio: 16/9; flex: 0 0 144px;
   object-fit: cover; border-radius: var(--radius-sm); background: var(--bg-tertiary);
