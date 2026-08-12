@@ -5,6 +5,8 @@ import { useParams } from 'next/navigation';
 import { PlayIcon, StarIcon } from '../../../components/Icons';
 
 const TICKS_PER_SECOND = 10000000;
+const EPISODE_SORT_STORAGE_KEY = 'cultanime:episode-sort';
+const EPISODE_SORT_OPTIONS = ['Oldest', 'Newest'];
 
 function formatAirDate(value) {
   if (!value) return null;
@@ -111,7 +113,7 @@ function EpisodeSortDropdown({ value, onChange }) {
           </div>
           <div className='scrollable-content'>
             <div className='options-list'>
-              {['Oldest', 'Newest'].map(option => (
+              {EPISODE_SORT_OPTIONS.map(option => (
                 <div key={option} role='option' aria-selected={value === option} tabIndex={0} className={'option' + (value === option ? ' active' : '')} onClick={() => selectSort(option)} onKeyDown={event => handleOptionKeyDown(event, option)}>
                   <span>{option}</span>
                 </div>
@@ -302,6 +304,13 @@ export default function AnimeDetailPage() {
   const [episodeSort, setEpisodeSort] = useState('Oldest');
   const watchlistActionRef = useRef(false);
   const watchlistRequestIdRef = useRef(0);
+  useEffect(() => {
+    const savedSort = window.localStorage.getItem(EPISODE_SORT_STORAGE_KEY);
+    if (EPISODE_SORT_OPTIONS.includes(savedSort)) {
+      setEpisodeSort(savedSort);
+    }
+  }, []);
+
 
   useEffect(() => {
     async function load() {
@@ -323,8 +332,14 @@ export default function AnimeDetailPage() {
     watchlistRequestIdRef.current += 1;
     watchlistActionRef.current = false;
     setWatchlistBusy(false);
-    setEpisodeSort('Oldest');
   }, [id]);
+
+  function updateEpisodeSort(nextSort) {
+    if (!EPISODE_SORT_OPTIONS.includes(nextSort)) return;
+
+    setEpisodeSort(nextSort);
+    window.localStorage.setItem(EPISODE_SORT_STORAGE_KEY, nextSort);
+  }
 
   async function toggleWatchlist() {
     if (watchlistActionRef.current) return;
@@ -438,7 +453,7 @@ export default function AnimeDetailPage() {
             <div className="episode-list">
               <div className='episode-list-header'>
                 <h2>Episodes ({anime.episodes.length})</h2>
-                <EpisodeSortDropdown value={episodeSort} onChange={setEpisodeSort} />
+                <EpisodeSortDropdown value={episodeSort} onChange={updateEpisodeSort} />
               </div>
               <div className="episode-grid">
                 {displayedEpisodes.map(ep => {
