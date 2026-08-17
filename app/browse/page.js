@@ -44,7 +44,11 @@ function BrowseContent() {
       try {
         const res = await fetch('/api/watchlist');
         const data = await res.json();
-        setWatchlistIds(new Set((data.watchlist || []).map(item => String(item.anime_id))));
+        setWatchlistIds(new Set(
+          (data.watchlist || [])
+            .filter(item => !item.episode_id)
+            .map(item => String(item.anime_id))
+        ));
       } catch (error) {
         console.error('Watchlist state failed:', error);
       }

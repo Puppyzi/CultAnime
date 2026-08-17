@@ -3,10 +3,24 @@ export const dynamic = 'force-dynamic';
 import { getDb } from '../../../lib/db';
 import { createSessionCookie, getSessionId } from '../../../lib/session';
 
-export async function GET() {
+export async function GET(request) {
   try {
     const sessionId = await getSessionId();
     const db = getDb();
+    const episodeId = Number(new URL(request.url).searchParams.get('episode_id'));
+
+    if (Number.isInteger(episodeId) && episodeId > 0) {
+      const row = db.prepare(`
+        SELECT wh.*, e.episode_number, e.anime_id, a.title, a.cover_image, a.title_romaji, a.format
+        FROM watch_history wh
+        JOIN episodes e ON wh.episode_id = e.id
+        JOIN anime a ON wh.anime_id = a.id
+        WHERE wh.session_id = ? AND wh.episode_id = ?
+      `).get(sessionId, episodeId);
+
+      return NextResponse.json({ history: row ? [row] : [] });
+    }
+
     const history = db.prepare(`
       SELECT wh.*, e.episode_number, e.anime_id, a.title, a.cover_image, a.title_romaji, a.format
       FROM watch_history wh

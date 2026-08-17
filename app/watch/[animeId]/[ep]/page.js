@@ -94,6 +94,42 @@ function writeNextAiringHidden(hidden) {
   }
 }
 
+function resumeSecondsFromHistory(entry) {
+  const progress = Number(entry?.progress);
+  if (!Number.isFinite(progress) || progress < 5) return 0;
+  return progress;
+}
+
+function persistWatchProgress({ episodeId, animeId, currentTime, duration, useBeacon = false }) {
+  if (!episodeId || !Number.isFinite(currentTime) || currentTime < 5) return;
+
+  const payload = {
+    episode_id: episodeId,
+    anime_id: Number.parseInt(animeId, 10),
+    progress: currentTime,
+    duration: duration || 0,
+    completed: duration > 0 && currentTime / duration > 0.9,
+  };
+
+  try {
+    const body = JSON.stringify(payload);
+
+    if (useBeacon && navigator.sendBeacon) {
+      const blob = new Blob([body], { type: 'application/json' });
+      if (navigator.sendBeacon('/api/history', blob)) return;
+    }
+
+    fetch('/api/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: useBeacon,
+    }).catch(() => {});
+  } catch {
+    // Progress persistence must never interrupt playback.
+  }
+}
+
 function episodeThumbnailUrl(ep, width = 320, height = 180) {
   return `/api/thumbnail/${ep.id}?width=${width}&height=${height}`;
 }
@@ -1170,11 +1206,16 @@ export default function WatchPage() {
     writeNextAiringHidden(true);
   }
 
-  const retryPlayback = useCallback(() => {
+  const rememberCurrentPlaybackPosition = useCallback(() => {
     const currentTime = Number(videoRef.current?.currentTime);
     if (Number.isFinite(currentTime) && currentTime > 0) {
       playbackResumeTimeRef.current = currentTime;
     }
+  }, []);
+
+  const retryPlayback = useCallback(() => {
+    rememberCurrentPlaybackPosition();
+    const currentTime = Number(videoRef.current?.currentTime);
     postPlayerEvent({
       event: 'manual-retry',
       animeId,
@@ -1190,7 +1231,7 @@ export default function WatchPage() {
     automaticStreamReloadsRef.current = 0;
     setStreamError(null);
     setStreamReloadKey(value => value + 1);
-  }, [animeId, currentEp]);
+  }, [animeId, currentEp, rememberCurrentPlaybackPosition]);
 
   const buildPlayerEventPayload = useCallback((event, details = {}) => {
     const video = videoRef.current;
@@ -1251,6 +1292,20 @@ export default function WatchPage() {
           return; // keep the loading skeleton up until the redirect lands
         }
 
+        if (episode) {
+          try {
+            const historyRes = await fetch(`/api/history?episode_id=${episode.id}`, { cache: 'no-store' });
+            const historyData = await historyRes.json();
+            if (!active) return;
+            const resumeAt = resumeSecondsFromHistory(historyData.history?.[0]);
+            if (resumeAt > 0) {
+              playbackResumeTimeRef.current = resumeAt;
+            }
+          } catch {
+            // Resume is optional; playback can still start from the beginning.
+          }
+        }
+
         setCurrentEp(episode);
       } catch (e) { console.error(e); }
       if (active) {
@@ -1273,20 +1328,20 @@ export default function WatchPage() {
         const data = await res.json();
         if (!active || !res.ok) return;
 
-        setInWatchlist(Boolean(data.watchlist?.some(item => item.anime_id === animeIdNumber)));
+        setInWatchlist(Boolean(data.watchlist?.some(item => item.episode_id === currentEp.id)));
       } catch (error) {
         console.error('Watchlist state failed:', error);
       }
     }
 
-    if (Number.isFinite(animeIdNumber)) {
+    if (Number.isFinite(animeIdNumber) && currentEp?.id) {
       loadWatchlistState();
     }
 
     return () => {
       active = false;
     };
-  }, [animeIdNumber]);
+  }, [animeIdNumber, currentEp?.id]);
 
   useEffect(() => {
     const handlePageExit = () => {
@@ -1380,8 +1435,10 @@ export default function WatchPage() {
           playbackResumeTimeRef.current = 0;
         };
         video.addEventListener('loadedmetadata', restorePlaybackPosition, { once: true });
+        video.addEventListener('canplay', restorePlaybackPosition, { once: true });
         removeVideoRecoveryListeners = () => {
           video.removeEventListener('loadedmetadata', restorePlaybackPosition);
+          video.removeEventListener('canplay', restorePlaybackPosition);
         };
 
         const hlsUrl = data.hlsUrl;
@@ -1480,6 +1537,7 @@ export default function WatchPage() {
           });
           removeVideoRecoveryListeners = () => {
             video.removeEventListener('loadedmetadata', restorePlaybackPosition);
+            video.removeEventListener('canplay', restorePlaybackPosition);
             recovery.dispose();
           };
 
@@ -1533,6 +1591,7 @@ export default function WatchPage() {
           });
           removeVideoRecoveryListeners = () => {
             video.removeEventListener('loadedmetadata', restorePlaybackPosition);
+            video.removeEventListener('canplay', restorePlaybackPosition);
             recovery.dispose();
           };
 
@@ -1556,6 +1615,7 @@ export default function WatchPage() {
               hlsLevel: hls.currentLevel,
               hlsAutoLevelEnabled: hls.autoLevelEnabled,
             });
+            restorePlaybackPosition();
             video.play().catch(() => {});
           });
 
@@ -1694,11 +1754,19 @@ export default function WatchPage() {
     return () => {
       active = false;
       abortController.abort();
+      rememberCurrentPlaybackPosition();
+      persistWatchProgress({
+        episodeId: currentEp.id,
+        animeId,
+        currentTime: Number(ownedVideo?.currentTime),
+        duration: ownedVideo?.duration || 0,
+        useBeacon: true,
+      });
       removeVideoRecoveryListeners();
       stopPlaybackKeepAlive();
       teardownPlayer(ownedVideo);
     };
-  }, [currentEp, selectedAudioTrack, subtitleMode, burnedSubtitleKey, teardownPlayer, animeId, streamReloadKey, reportPlayerEvent, buildPlayerEventPayload]);
+  }, [currentEp, selectedAudioTrack, subtitleMode, burnedSubtitleKey, teardownPlayer, animeId, streamReloadKey, reportPlayerEvent, buildPlayerEventPayload, rememberCurrentPlaybackPosition]);
 
   useEffect(() => {
     const softSubtitle = subtitleMode === 'burned' ? 'off' : selectedSubtitle;
@@ -1707,6 +1775,8 @@ export default function WatchPage() {
 
   function handleSubtitleChange(nextSubtitle) {
     if (streamLoading) return;
+
+    rememberCurrentPlaybackPosition();
 
     const nextSubtitleTrack = getSubtitleById(subtitles, nextSubtitle);
     const nextMode = nextSubtitle === 'off'
@@ -1730,6 +1800,7 @@ export default function WatchPage() {
   function handleAudioTrackChange(nextAudioTrack) {
     if (streamLoading) return;
 
+    rememberCurrentPlaybackPosition();
     setSelectedAudioTrack(nextAudioTrack);
 
     if (nextAudioTrack === 'default') {
@@ -1739,23 +1810,16 @@ export default function WatchPage() {
     }
   }
 
-  const saveProgress = useCallback(async () => {
-    if (!videoRef.current || !currentEp) return;
-    const v = videoRef.current;
-    if (v.currentTime < 5) return;
-    try {
-      await fetch('/api/history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          episode_id: currentEp.id,
-          anime_id: parseInt(animeId),
-          progress: v.currentTime,
-          duration: v.duration || 0,
-          completed: v.duration > 0 && v.currentTime / v.duration > 0.9,
-        }),
-      });
-    } catch (e) { /* ignore to avoid Next.js unhandled rejection overlay */ }
+  const saveProgress = useCallback(async (options) => {
+    const video = videoRef.current;
+    if (!video || !currentEp) return;
+    persistWatchProgress({
+      episodeId: currentEp.id,
+      animeId,
+      currentTime: Number(video.currentTime),
+      duration: video.duration || 0,
+      useBeacon: options?.useBeacon === true,
+    });
   }, [currentEp, animeId]);
 
   async function handleCopyMpvCommand() {
@@ -1785,7 +1849,7 @@ export default function WatchPage() {
   }
 
   async function handleWatchlistToggle() {
-    if (!Number.isFinite(animeIdNumber) || watchlistBusy) return;
+    if (!Number.isFinite(animeIdNumber) || !currentEp?.id || watchlistBusy) return;
 
     const nextWatchlistState = !inWatchlist;
     setWatchlistBusy(true);
@@ -1796,6 +1860,7 @@ export default function WatchPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           anime_id: animeIdNumber,
+          episode_id: currentEp.id,
           action: nextWatchlistState ? 'add' : 'remove',
         }),
       });
@@ -1813,8 +1878,24 @@ export default function WatchPage() {
   }
 
   useEffect(() => {
-    saveInterval.current = setInterval(saveProgress, 15000);
-    return () => clearInterval(saveInterval.current);
+    const persist = () => saveProgress({ useBeacon: true });
+    const handleVisibilityChange = () => {
+      if (document.hidden) persist();
+    };
+
+    // Capture phase so the timestamp is saved before the player teardown
+    // listener (registered earlier) resets the video element.
+    window.addEventListener('pagehide', persist, true);
+    window.addEventListener('beforeunload', persist, true);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    saveInterval.current = setInterval(() => saveProgress(), 15000);
+
+    return () => {
+      clearInterval(saveInterval.current);
+      window.removeEventListener('pagehide', persist, true);
+      window.removeEventListener('beforeunload', persist, true);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [saveProgress]);
 
 
@@ -1948,13 +2029,13 @@ export default function WatchPage() {
                   className={`watchlist-icon-button${inWatchlist ? ' active' : ''}`}
                   onClick={handleWatchlistToggle}
                   disabled={watchlistBusy}
-                  aria-label={inWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                  aria-label={inWatchlist ? 'Remove this episode from Watchlist' : 'Save this episode to Watchlist'}
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M6 4.75C6 3.78 6.78 3 7.75 3h8.5C17.22 3 18 3.78 18 4.75v15.5l-6-3.6-6 3.6V4.75Z" />
                   </svg>
                   <span className="watchlist-tooltip">
-                    {inWatchlist ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                    {inWatchlist ? 'Remove this episode' : 'Save this episode'}
                   </span>
                 </button>
               </div>

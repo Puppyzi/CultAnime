@@ -321,7 +321,7 @@ export default function AnimeDetailPage() {
 
         const wlRes = await fetch('/api/watchlist');
         const wlData = await wlRes.json();
-        setInWatchlist(wlData.watchlist?.some(w => w.anime_id === parseInt(id)));
+        setInWatchlist(wlData.watchlist?.some(w => w.anime_id === parseInt(id) && !w.episode_id));
       } catch (e) { console.error(e); }
       setLoading(false);
     }

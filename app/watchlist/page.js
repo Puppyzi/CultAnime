@@ -4,6 +4,50 @@ import Link from 'next/link';
 import { mediaFormatLabel } from '../../lib/media-format';
 import { mediaStatusBadgeLabel } from '../../lib/media-status';
 import { StarIcon, CloseIcon, BookmarkIcon } from '../../components/Icons';
+import { ContinueWatchingCard } from '../../components/AnimeCard';
+
+function isMovieItem(item) {
+  return String(item.format || '').toUpperCase() === 'MOVIE';
+}
+
+function WatchlistTitleCard({ item, onRemove }) {
+  const formatLabel = mediaFormatLabel(item.format);
+  const statusLabel = mediaStatusBadgeLabel(item);
+
+  return (
+    <div className="anime-card">
+      <Link href={`/anime/${item.anime_id}`}>
+        <div className="anime-card-image-wrap">
+          <img className="anime-card-image" src={item.cover_image} alt={item.title} />
+          {(formatLabel || item.episode_count > 0 || statusLabel) && (
+            <div className="anime-card-badge">
+              {formatLabel && <span className="badge-format">{formatLabel}</span>}
+              {item.episode_count > 0 && !isMovieItem(item) && (
+                <span className="badge-eps">{item.episode_count} EP</span>
+              )}
+              {statusLabel && <span className="badge-status">{statusLabel}</span>}
+            </div>
+          )}
+        </div>
+        <div className="anime-card-info">
+          <div className="anime-card-title">{item.title}</div>
+          <div className="anime-card-meta">
+            {item.rating && <span className="anime-card-rating"><StarIcon /> {item.rating}%</span>}
+            {item.year && <span>{item.year}</span>}
+          </div>
+        </div>
+      </Link>
+      <button
+        className="card-remove-button"
+        type="button"
+        onClick={() => onRemove(item)}
+        aria-label={`Remove ${item.title} from Watchlist`}
+      >
+        <CloseIcon />
+      </button>
+    </div>
+  );
+}
 
 export default function WatchlistPage() {
   const [watchlist, setWatchlist] = useState([]);
@@ -21,19 +65,28 @@ export default function WatchlistPage() {
     load();
   }, []);
 
-  async function remove(animeId) {
+  async function remove(item) {
     await fetch('/api/watchlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ anime_id: animeId, action: 'remove' }),
+      body: JSON.stringify({
+        anime_id: item.anime_id,
+        episode_id: item.episode_id || undefined,
+        action: 'remove',
+      }),
     });
-    setWatchlist(prev => prev.filter(w => w.anime_id !== animeId));
+    setWatchlist(prev => prev.filter(entry => entry.id !== item.id));
   }
+
+  const titleItems = watchlist.filter(item => !item.episode_id);
+  const seriesItems = titleItems.filter(item => !isMovieItem(item));
+  const movieItems = titleItems.filter(isMovieItem);
+  const episodeItems = watchlist.filter(item => item.episode_id);
 
   return (
     <div className="watchlist-page">
       <h1>My Watchlist</h1>
-      <p className="subtitle">Your saved anime collection</p>
+      <p className="subtitle">Series, movies, and episodes you saved</p>
 
       {loading ? (
         <div className="anime-grid">
@@ -51,44 +104,54 @@ export default function WatchlistPage() {
           <Link href="/browse" className="btn btn-primary" style={{ marginTop: '1rem' }}>Browse Anime</Link>
         </div>
       ) : (
-        <div className="anime-grid">
-          {watchlist.map(w => {
-            const formatLabel = mediaFormatLabel(w.format);
-            const statusLabel = mediaStatusBadgeLabel(w);
-
-            return (
-              <div key={w.anime_id} className="anime-card">
-                <Link href={`/anime/${w.anime_id}`}>
-                  <div className="anime-card-image-wrap">
-                    <img className="anime-card-image" src={w.cover_image} alt={w.title} />
-                    {(formatLabel || w.episode_count > 0 || statusLabel) && (
-                      <div className="anime-card-badge">
-                        {formatLabel && <span className="badge-format">{formatLabel}</span>}
-                        {w.episode_count > 0 && <span className="badge-eps">{w.episode_count} EP</span>}
-                        {statusLabel && <span className="badge-status">{statusLabel}</span>}
-                      </div>
-                    )}
-                  </div>
-                  <div className="anime-card-info">
-                    <div className="anime-card-title">{w.title}</div>
-                    <div className="anime-card-meta">
-                      {w.rating && <span className="anime-card-rating"><StarIcon /> {w.rating}%</span>}
-                      {w.year && <span>{w.year}</span>}
-                    </div>
-                  </div>
-                </Link>
-                <button
-                  className="card-remove-button"
-                  type="button"
-                  onClick={() => remove(w.anime_id)}
-                  aria-label={`Remove ${w.title} from Watchlist`}
-                >
-                  <CloseIcon />
-                </button>
+        <>
+          {seriesItems.length > 0 && (
+            <section className="watchlist-section">
+              <h2>Series</h2>
+              <div className="anime-grid">
+                {seriesItems.map(item => (
+                  <WatchlistTitleCard key={item.id} item={item} onRemove={remove} />
+                ))}
               </div>
-            );
-          })}
-        </div>
+            </section>
+          )}
+
+          {episodeItems.length > 0 && (
+            <section className="watchlist-section">
+              <h2>Episodes</h2>
+              <div className="anime-grid">
+                {episodeItems.map(w => (
+                  <ContinueWatchingCard
+                    key={w.id}
+                    item={{
+                      id: w.id,
+                      anime_id: w.anime_id,
+                      episode_id: w.episode_id,
+                      episode_number: w.episode_number,
+                      cover_image: w.cover_image,
+                      title: w.title,
+                      format: w.format,
+                      duration: 0,
+                      progress: 0,
+                    }}
+                    onRemove={() => remove(w)}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {movieItems.length > 0 && (
+            <section className="watchlist-section">
+              <h2>Movies</h2>
+              <div className="anime-grid">
+                {movieItems.map(item => (
+                  <WatchlistTitleCard key={item.id} item={item} onRemove={remove} />
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
     </div>
   );

@@ -196,7 +196,11 @@ export default function HomePage() {
         const watchlistData = await watchlistRes.json();
         setAnime(animeData.anime || []);
         setHistory(historyData.history || []);
-        setWatchlistIds(new Set((watchlistData.watchlist || []).map(item => String(item.anime_id))));
+        setWatchlistIds(new Set(
+          (watchlistData.watchlist || [])
+            .filter(item => !item.episode_id)
+            .map(item => String(item.anime_id))
+        ));
       } catch (e) { console.error(e); }
       setLoading(false);
     }

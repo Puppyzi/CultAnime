@@ -3145,6 +3145,16 @@ textarea.form-input {
   font-size: 0.85rem;
 }
 
+.watchlist-section {
+  margin-bottom: 2rem;
+}
+
+.watchlist-section h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 0.85rem;
+}
+
 /* ---- REQUEST ---- */
 .request-page {
   min-height: calc(100vh - var(--nav-height));
