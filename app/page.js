@@ -1,5 +1,6 @@
 'use client';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { mediaFormatLabel } from '../lib/media-format';
 import { shouldShowReleasingBadge } from '../lib/media-status';
@@ -17,67 +18,16 @@ function SidebarPoster({ anime }) {
     );
   }
 
-  return <img src={anime.cover_image} alt={anime.title} />;
+  return <Image src={anime.cover_image} alt={anime.title} width={40} height={56} sizes="40px" />;
 }
 
-function getHeroAnime(anime, history) {
-  const airingAnime = anime.filter(shouldShowReleasingBadge);
-
-  // When nothing is airing, retain the full-library fallback requested for
-  // the hero instead of filtering it down to a user's watch history.
-  if (airingAnime.length === 0) return anime;
-
-  const animeById = new Map(anime.map(item => [String(item.id), item]));
-  const watchedAnime = history
-    .map(item => animeById.get(String(item.anime_id)))
-    .filter(Boolean);
-  const seenIds = new Set();
-
-  return [...airingAnime, ...watchedAnime].filter(item => {
-    const id = String(item.id);
-    if (seenIds.has(id)) return false;
-    seenIds.add(id);
-    return true;
-  });
-}
-
-export default function HomePage() {
-  const [anime, setAnime] = useState([]);
-  const [history, setHistory] = useState([]);
-  const [watchlistIds, setWatchlistIds] = useState(() => new Set());
-  const [featuredIndex, setFeaturedIndex] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [removingEpisodeIds, setRemovingEpisodeIds] = useState({});
+// Owns the rotating featured slide so the 6.5s carousel tick only re-renders
+// the hero, not the full anime grid below it.
+function HeroCarousel({ heroAnime, history }) {
+  const [featuredIndex, setFeaturedIndex] = useState(() => (
+    heroAnime.length > 0 ? Math.floor(Math.random() * heroAnime.length) : 0
+  ));
   const heroSwipeRef = useRef({ active: false, startX: 0, startY: 0 });
-  const removingEpisodeIdsRef = useRef(new Set());
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const [animeRes, historyRes, watchlistRes] = await Promise.all([
-          fetch('/api/anime?sort=created_at&order=DESC&limit=500'),
-          fetch('/api/history'),
-          fetch('/api/watchlist'),
-        ]);
-        const animeData = await animeRes.json();
-        const historyData = await historyRes.json();
-        const watchlistData = await watchlistRes.json();
-        const list = animeData.anime || [];
-        const browserHistory = historyData.history || [];
-        const heroAnime = getHeroAnime(list, browserHistory);
-        setAnime(list);
-        setHistory(browserHistory);
-        setWatchlistIds(new Set((watchlistData.watchlist || []).map(item => String(item.anime_id))));
-        if (heroAnime.length > 0) {
-          setFeaturedIndex(Math.floor(Math.random() * heroAnime.length));
-        }
-      } catch (e) { console.error(e); }
-      setLoading(false);
-    }
-    load();
-  }, []);
-
-  const heroAnime = useMemo(() => getHeroAnime(anime, history), [anime, history]);
 
   useEffect(() => {
     if (heroAnime.length === 0) {
@@ -98,8 +48,6 @@ export default function HomePage() {
     return () => clearInterval(intervalId);
   }, [heroAnime.length]);
 
-  const popular = [...anime].sort((a, b) => (b.rating || 0) - (a.rating || 0));
-  const recentlyAdded = anime.slice(0, 3);
   const featured = heroAnime[featuredIndex] || heroAnime[0] || null;
   const featuredFormatLabel = featured ? mediaFormatLabel(featured.format) : '';
   const featuredHistory = featured ? history.find(h => h.anime_id === featured.id) : null;
@@ -150,7 +98,120 @@ export default function HomePage() {
     heroSwipeRef.current = { active: false, startX: 0, startY: 0 };
   }
 
-  async function removeContinueWatching(episodeId) {
+  if (!featured) return null;
+
+  return (
+    <div
+      className="hero"
+      onPointerDown={handleHeroPointerDown}
+      onPointerUp={handleHeroPointerUp}
+      onPointerCancel={handleHeroPointerCancel}
+      onPointerLeave={handleHeroPointerCancel}
+    >
+      <div key={`hero-bg-${featured.id}`} className="hero-bg">
+        <Image
+          className="hero-bg-image"
+          src={featured.banner_image || featured.cover_image}
+          alt=""
+          fill
+          priority
+          sizes="100vw"
+        />
+      </div>
+      <div className="hero-overlay" />
+      <div key={`hero-content-${featured.id}`} className="hero-content">
+        <h1>{featured.title}</h1>
+        <div className="hero-meta">
+          {featured.rating && <span><StarIcon style={{ color: 'var(--yellow)' }} /> {featured.rating}%</span>}
+          {featuredFormatLabel && <span>{featuredFormatLabel}</span>}
+          {featured.year && <span>{featured.year}</span>}
+          {featured.episodes_total && <span>{featured.episodes_total} EP</span>}
+          {featured.genres?.slice(0, 3).map(g => <span key={g}>{g}</span>)}
+        </div>
+        <p className="hero-description">{featured.description}</p>
+        <div className="hero-actions">
+          <Link href={featuredWatchHref} className="btn btn-primary">
+            <PlayIcon /> {featuredHistory ? `Continue EP ${featuredHistory.episode_number}` : 'Watch Now'}
+          </Link>
+          <Link href={`/anime/${featured.id}`} className="btn btn-secondary">Details</Link>
+        </div>
+      </div>
+      {canSwipeHero && heroAnime.length <= 12 && (
+        <div className="hero-carousel-dots" aria-label="Featured anime slides">
+          {heroAnime.map((item, index) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`hero-carousel-dot ${index === featuredIndex ? 'active' : ''}`}
+              onClick={() => goToHero(index)}
+              aria-label={`Show ${item.title}`}
+              aria-current={index === featuredIndex ? 'true' : undefined}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getHeroAnime(anime, history) {
+  const airingAnime = anime.filter(shouldShowReleasingBadge);
+
+  // When nothing is airing, retain the full-library fallback requested for
+  // the hero instead of filtering it down to a user's watch history.
+  if (airingAnime.length === 0) return anime;
+
+  const animeById = new Map(anime.map(item => [String(item.id), item]));
+  const watchedAnime = history
+    .map(item => animeById.get(String(item.anime_id)))
+    .filter(Boolean);
+  const seenIds = new Set();
+
+  return [...airingAnime, ...watchedAnime].filter(item => {
+    const id = String(item.id);
+    if (seenIds.has(id)) return false;
+    seenIds.add(id);
+    return true;
+  });
+}
+
+export default function HomePage() {
+  const [anime, setAnime] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [watchlistIds, setWatchlistIds] = useState(() => new Set());
+  const [loading, setLoading] = useState(true);
+  const [removingEpisodeIds, setRemovingEpisodeIds] = useState({});
+  const removingEpisodeIdsRef = useRef(new Set());
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [animeRes, historyRes, watchlistRes] = await Promise.all([
+          fetch('/api/anime?sort=created_at&order=DESC&limit=500'),
+          fetch('/api/history'),
+          fetch('/api/watchlist'),
+        ]);
+        const animeData = await animeRes.json();
+        const historyData = await historyRes.json();
+        const watchlistData = await watchlistRes.json();
+        setAnime(animeData.anime || []);
+        setHistory(historyData.history || []);
+        setWatchlistIds(new Set((watchlistData.watchlist || []).map(item => String(item.anime_id))));
+      } catch (e) { console.error(e); }
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  const heroAnime = useMemo(() => getHeroAnime(anime, history), [anime, history]);
+  const popular = useMemo(
+    () => [...anime].sort((a, b) => (b.rating || 0) - (a.rating || 0)),
+    [anime]
+  );
+  const topAnime = useMemo(() => popular.slice(0, 10), [popular]);
+  const recentlyAdded = useMemo(() => anime.slice(0, 3), [anime]);
+
+  const removeContinueWatching = useCallback(async (episodeId) => {
     if (removingEpisodeIdsRef.current.has(episodeId)) return;
 
     removingEpisodeIdsRef.current.add(episodeId);
@@ -178,9 +239,9 @@ export default function HomePage() {
         return remaining;
       });
     }
-  }
+  }, []);
 
-  async function updateWatchlist(animeId, shouldAdd) {
+  const updateWatchlist = useCallback(async (animeId, shouldAdd) => {
     const res = await fetch('/api/watchlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -201,7 +262,7 @@ export default function HomePage() {
       }
       return next;
     });
-  }
+  }, []);
 
   if (loading) {
     return (
@@ -229,52 +290,8 @@ export default function HomePage() {
 
   return (
     <>
-      {featured && (
-        <div
-          className="hero"
-          onPointerDown={handleHeroPointerDown}
-          onPointerUp={handleHeroPointerUp}
-          onPointerCancel={handleHeroPointerCancel}
-          onPointerLeave={handleHeroPointerCancel}
-        >
-          <div key={`hero-bg-${featured.id}`} className="hero-bg" style={{ backgroundImage: `url(${featured.banner_image || featured.cover_image})` }} />
-          <div className="hero-overlay" />
-          <div key={`hero-content-${featured.id}`} className="hero-content">
-            <h1>{featured.title}</h1>
-            <div className="hero-meta">
-              {featured.rating && <span><StarIcon style={{ color: 'var(--yellow)' }} /> {featured.rating}%</span>}
-              {featuredFormatLabel && <span>{featuredFormatLabel}</span>}
-              {featured.year && <span>{featured.year}</span>}
-              {featured.episodes_total && <span>{featured.episodes_total} EP</span>}
-              {featured.genres?.slice(0, 3).map(g => <span key={g}>{g}</span>)}
-            </div>
-            <p className="hero-description">{featured.description}</p>
-            <div className="hero-actions">
-              <Link href={featuredWatchHref} className="btn btn-primary">
-                <PlayIcon /> {featuredHistory ? `Continue EP ${featuredHistory.episode_number}` : 'Watch Now'}
-              </Link>
-              <Link href={`/anime/${featured.id}`} className="btn btn-secondary">Details</Link>
-            </div>
-          </div>
-          {canSwipeHero && (
-            <>
-              {heroAnime.length <= 12 && (
-                <div className="hero-carousel-dots" aria-label="Featured anime slides">
-                  {heroAnime.map((item, index) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className={`hero-carousel-dot ${index === featuredIndex ? 'active' : ''}`}
-                      onClick={() => goToHero(index)}
-                      aria-label={`Show ${item.title}`}
-                      aria-current={index === featuredIndex ? 'true' : undefined}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </div>
+      {heroAnime.length > 0 && (
+        <HeroCarousel heroAnime={heroAnime} history={history} />
       )}
 
       <div className="home-layout">
@@ -290,7 +307,7 @@ export default function HomePage() {
                     key={h.id}
                     item={h}
                     removing={Boolean(removingEpisodeIds[h.episode_id])}
-                    onRemove={() => removeContinueWatching(h.episode_id)}
+                    onRemove={removeContinueWatching}
                   />
                 ))}
               </ScrollRow>
@@ -299,7 +316,7 @@ export default function HomePage() {
 
           <MobileDiscoveryRows
             recentlyAdded={recentlyAdded}
-            popular={popular.slice(0, 10)}
+            popular={topAnime}
           />
 
           <section className="section">
@@ -338,7 +355,7 @@ export default function HomePage() {
 
           <section className="sidebar-section">
             <div className="sidebar-title"><FlameIcon style={{ color: '#fb923c' }} /> Top Anime</div>
-            {popular.slice(0, 10).map((a, i) => (
+            {topAnime.map((a, i) => (
               <Link key={a.id} href={`/anime/${a.id}`} className="sidebar-item">
                 <span className={`sidebar-rank ${i < 3 ? 'top' : ''}`}>{String(i + 1).padStart(2, '0')}</span>
                 <SidebarPoster anime={a} />

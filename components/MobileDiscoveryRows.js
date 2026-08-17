@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import ScrollRow from './ScrollRow';
 import { FilmIcon, FlameIcon, StarIcon } from './Icons';
@@ -17,12 +18,13 @@ function Poster({ anime }) {
   // The adjacent title already names the link, so the artwork stays decorative
   // to avoid repeating the anime title for screen-reader users.
   return (
-    <img
+    <Image
       className={styles.poster}
       src={anime.cover_image}
       alt=""
-      loading="lazy"
-      decoding="async"
+      width={46}
+      height={64}
+      sizes="46px"
     />
   );
 }

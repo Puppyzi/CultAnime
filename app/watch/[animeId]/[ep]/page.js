@@ -2,7 +2,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import Hls from 'hls.js';
 import { PlayIcon } from '../../../../components/Icons';
 import {
   chooseSubtitle,
@@ -23,6 +22,18 @@ const MAX_AUTOMATIC_STREAM_RELOADS = 4;
 const PENDING_PLAYER_EVENTS_KEY = 'cultanime.pendingPlayerEvents';
 const MAX_PENDING_PLAYER_EVENTS = 20;
 const PLAYBACK_KEEPALIVE_INTERVAL_MS = 10000;
+
+// hls.js is ~0.5 MB of script, so it is loaded on demand instead of being
+// bundled into the route chunk. The page shell (episode list, metadata,
+// controls) renders without waiting for it, and the module is cached after
+// the first load.
+let hlsModulePromise = null;
+function loadHls() {
+  if (!hlsModulePromise) {
+    hlsModulePromise = import('hls.js').then(module => module.default);
+  }
+  return hlsModulePromise;
+}
 
 function mediaPreferenceKey(baseKey, animeId) {
   return animeId ? `${baseKey}.${animeId}` : baseKey;
@@ -1226,7 +1237,20 @@ export default function WatchPage() {
         const data = await res.json();
         if (!active) return;
         setAnime(data);
-        const episode = data.episodes?.find(e => e.episode_number === episodeNum);
+        const episodes = data.episodes || [];
+        const episode = episodes.find(e => e.episode_number === episodeNum);
+
+        // Watch buttons always link to episode "1", but some libraries number
+        // a season's files as a continuation (e.g. 13-25). Whatever this site
+        // lists first for the entry is its episode 1, so play that instead.
+        if (!episode && episodeNum === 1 && episodes.length > 0) {
+          const firstEpisode = episodes.reduce((lowest, e) => (
+            e.episode_number < lowest.episode_number ? e : lowest
+          ));
+          router.replace(`/watch/${animeId}/${firstEpisode.episode_number}`);
+          return; // keep the loading skeleton up until the redirect lands
+        }
+
         setCurrentEp(episode);
       } catch (e) { console.error(e); }
       if (active) {
@@ -1303,6 +1327,8 @@ export default function WatchPage() {
 
     async function initStream() {
       try {
+        // Fetch the hls.js chunk in parallel with the stream negotiation.
+        const hlsLibraryPromise = loadHls();
         const streamParams = new URLSearchParams();
         if (selectedAudioTrack !== 'default') {
           streamParams.set('audioStreamIndex', selectedAudioTrack);
@@ -1430,6 +1456,9 @@ export default function WatchPage() {
           stopPlaybackKeepAlive();
           teardownPlayer(video);
         };
+
+        const Hls = await hlsLibraryPromise;
+        if (!isActive()) return;
 
         // Prefer hls.js wherever MSE is available: Chromium's built-in HLS
         // demuxer rejects transcoded segments whose timestamps are slightly

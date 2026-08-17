@@ -1,5 +1,6 @@
 'use client';
-import { useRef, useState } from 'react';
+import { memo, useRef, useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { mediaFormatLabel } from '../lib/media-format';
 import { mediaStatusBadgeLabel } from '../lib/media-status';
@@ -29,8 +30,10 @@ function useFlipNavigation(href) {
   return { isFlipping, handleClick, handleMouseEnter };
 }
 
-export function AnimeCard({ anime, inWatchlist = false, onWatchlistChange }) {
+export const AnimeCard = memo(function AnimeCard({ anime, inWatchlist = false, onWatchlistChange }) {
   const href = `/anime/${anime.id}`;
+  const watchHref = `/watch/${anime.id}/1`;
+  const router = useRouter();
   const { isFlipping, handleClick, handleMouseEnter } = useFlipNavigation(href);
   const formatLabel = mediaFormatLabel(anime.format);
   const statusLabel = mediaStatusBadgeLabel(anime);
@@ -60,12 +63,13 @@ export function AnimeCard({ anime, inWatchlist = false, onWatchlistChange }) {
     <div className={`anime-card ${isFlipping ? 'card-flip-out' : ''}`}>
       <div className="anime-card-image-wrap">
         <a href={href} onClick={handleClick} onMouseEnter={handleMouseEnter} className="anime-card-image-link">
-          <img
+          <Image
             className="anime-card-image"
             src={anime.cover_image || '/placeholder.png'}
             alt={anime.title}
-            loading="lazy"
-            decoding="async"
+            width={340}
+            height={476}
+            sizes="(max-width: 768px) 45vw, 220px"
           />
         </a>
         <div className="anime-card-badge">
@@ -88,7 +92,16 @@ export function AnimeCard({ anime, inWatchlist = false, onWatchlistChange }) {
                 <BookmarkIcon />
               </button>
             )}
-            <a href={href} onClick={handleClick} onMouseEnter={handleMouseEnter} className="btn btn-primary btn-sm anime-card-watch-action">
+            <a
+              href={watchHref}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                router.push(watchHref);
+              }}
+              onMouseEnter={() => router.prefetch(watchHref)}
+              className="btn btn-primary btn-sm anime-card-watch-action"
+            >
               <PlayIcon /> Watch
             </a>
           </div>
@@ -104,9 +117,9 @@ export function AnimeCard({ anime, inWatchlist = false, onWatchlistChange }) {
       </a>
     </div>
   );
-}
+});
 
-export function ContinueWatchingCard({ item, onRemove, removing = false }) {
+export const ContinueWatchingCard = memo(function ContinueWatchingCard({ item, onRemove, removing = false }) {
   const href = `/watch/${item.anime_id}/${item.episode_number}`;
   const { isFlipping, handleClick, handleMouseEnter } = useFlipNavigation(href);
   const formatLabel = mediaFormatLabel(item.format);
@@ -117,14 +130,21 @@ export function ContinueWatchingCard({ item, onRemove, removing = false }) {
   function handleRemove(event) {
     event.preventDefault();
     event.stopPropagation();
-    onRemove?.();
+    onRemove?.(item.episode_id);
   }
 
   return (
     <div className={`anime-card continue-watching-card ${isFlipping ? 'card-flip-out' : ''}`}>
       <a href={href} onClick={handleClick} onMouseEnter={handleMouseEnter} className="continue-watching-card-link">
         <div className="anime-card-image-wrap">
-          <img className="anime-card-image" src={item.cover_image || '/placeholder.png'} alt={item.title} />
+          <Image
+            className="anime-card-image"
+            src={item.cover_image || '/placeholder.png'}
+            alt={item.title}
+            width={340}
+            height={476}
+            sizes="(max-width: 768px) 45vw, 220px"
+          />
           {formatLabel && (
             <div className="anime-card-badge">
               <span className="badge-format">{formatLabel}</span>
@@ -135,9 +155,6 @@ export function ContinueWatchingCard({ item, onRemove, removing = false }) {
               <div className="card-progress-bar" style={{ width: `${progressPercent}%` }} />
             </div>
           )}
-          <div className="anime-card-overlay">
-            <span className="btn btn-primary btn-sm"><PlayIcon /> Continue</span>
-          </div>
         </div>
         <div className="anime-card-info">
           <div className="anime-card-title">{item.title}</div>
@@ -157,4 +174,4 @@ export function ContinueWatchingCard({ item, onRemove, removing = false }) {
       )}
     </div>
   );
-}
+});
