@@ -1,8 +1,9 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { PlayIcon } from '../../../../components/Icons';
+import { InfoIcon, PlayIcon } from '../../../../components/Icons';
 import {
   chooseSubtitle,
   isJapaneseAudioTrack,
@@ -854,6 +855,78 @@ function useDismissable(containerRef, open, setOpen) {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [open, containerRef, setOpen]);
+}
+
+function EpisodeSynopsisTip({ overview }) {
+  const iconRef = useRef(null);
+  const bubbleRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+
+  function place() {
+    const rect = iconRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setCoords({ top: rect.top + rect.height / 2, left: rect.left });
+  }
+
+  useEffect(() => {
+    if (!open) return;
+
+    function close(event) {
+      if (iconRef.current?.contains(event.target) || bubbleRef.current?.contains(event.target)) {
+        return;
+      }
+      setOpen(false);
+    }
+
+    document.addEventListener('pointerdown', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={iconRef}
+        type="button"
+        className="episode-synopsis-icon"
+        aria-label="Episode description"
+        aria-expanded={open}
+        onPointerEnter={(event) => {
+          if (event.pointerType !== 'mouse') return;
+          place();
+          setOpen(true);
+        }}
+        onPointerLeave={(event) => {
+          if (event.pointerType !== 'mouse') return;
+          setOpen(false);
+        }}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (event.nativeEvent.pointerType === 'mouse') return;
+          place();
+          setOpen(current => !current);
+        }}
+      >
+        <InfoIcon />
+      </button>
+      {open && createPortal(
+        <div
+          ref={bubbleRef}
+          className="episode-synopsis-bubble"
+          role="tooltip"
+          style={{ top: coords.top, left: coords.left }}
+        >
+          {overview}
+        </div>,
+        document.body
+      )}
+    </>
+  );
 }
 
 function formatBytes(bytes) {
@@ -2082,7 +2155,10 @@ export default function WatchPage() {
               />
               <span className="episode-number">{e.episode_number}</span>
                 <span className="episode-copy player-episode-copy">
-                  <span className="episode-title">{e.title || `Episode ${e.episode_number}`}</span>
+                  <span className="player-episode-title-row">
+                    <span className="episode-title">{e.title || `Episode ${e.episode_number}`}</span>
+                    {e.overview && <EpisodeSynopsisTip overview={e.overview} />}
+                  </span>
                   {e.episode_number === episodeNum && <span className="now-playing-badge sidebar-now-playing">Now Playing</span>}
                   {meta && <span className="episode-meta">{meta}</span>}
                 </span>
