@@ -1227,11 +1227,13 @@ main {
   display: inline-flex;
   color: var(--accent);
   font-size: 0.85rem;
-  transition: transform 750ms ease;
+  /* The springy cubic-bezier overshoots slightly, so the icon "bumps" into
+     its hover position instead of gliding; it eases back on unhover. */
+  transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .episode-detail-item:hover .episode-play-icon {
-  transform: rotate(360deg);
+  transform: translateX(5px);
 }
 
 .episode-thumbnail {

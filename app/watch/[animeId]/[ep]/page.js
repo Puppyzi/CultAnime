@@ -1868,6 +1868,10 @@ export default function WatchPage() {
                 ref={videoRef}
                 autoPlay
                 controls
+                // Without this, iPhone Safari force-fullscreens the video on
+                // play, and the stall watchdog's auto-recovery keeps pulling
+                // the user back into the native player after they exit it.
+                playsInline
                 preload="none"
                 onEnded={() => { saveProgress(); if (nextEp) router.push(`/watch/${animeId}/${nextEp.episode_number}`); }}
                 onPause={saveProgress}
