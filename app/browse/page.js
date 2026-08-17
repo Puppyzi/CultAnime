@@ -110,10 +110,12 @@ function BrowseContent() {
         <div className="anime-grid">
           {Array(12).fill(0).map((_, i) => (
             <div key={i} className="anime-card">
-              <div className="skeleton" style={{ width: '100%', aspectRatio: '2/3' }} />
-              <div className="anime-card-info">
-                <div className="skeleton" style={{ width: '80%', height: '16px', marginBottom: '0.3rem' }} />
-                <div className="skeleton" style={{ width: '50%', height: '12px' }} />
+              <div className="anime-card-surface">
+                <div className="anime-card-image-wrap skeleton" />
+                <div className="anime-card-info">
+                  <div className="skeleton anime-card-skeleton-title" />
+                  <div className="skeleton anime-card-skeleton-meta" />
+                </div>
               </div>
             </div>
           ))}

@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { mediaFormatLabel } from '../../lib/media-format';
 import { mediaStatusBadgeLabel } from '../../lib/media-status';
@@ -16,35 +17,43 @@ function WatchlistTitleCard({ item, onRemove }) {
 
   return (
     <div className="anime-card">
-      <Link href={`/anime/${item.anime_id}`}>
-        <div className="anime-card-image-wrap">
-          <img className="anime-card-image" src={item.cover_image} alt={item.title} />
-          {(formatLabel || item.episode_count > 0 || statusLabel) && (
-            <div className="anime-card-badge">
-              {formatLabel && <span className="badge-format">{formatLabel}</span>}
-              {item.episode_count > 0 && !isMovieItem(item) && (
-                <span className="badge-eps">{item.episode_count} EP</span>
-              )}
-              {statusLabel && <span className="badge-status">{statusLabel}</span>}
-            </div>
-          )}
-        </div>
-        <div className="anime-card-info">
-          <div className="anime-card-title">{item.title}</div>
-          <div className="anime-card-meta">
-            {item.rating && <span className="anime-card-rating"><StarIcon /> {item.rating}%</span>}
-            {item.year && <span>{item.year}</span>}
+      <div className="anime-card-surface">
+        <Link href={`/anime/${item.anime_id}`} className="anime-card-link">
+          <div className="anime-card-image-wrap">
+            <Image
+              className="anime-card-image"
+              src={item.cover_image || '/placeholder.png'}
+              alt={item.title}
+              fill
+              sizes="(max-width: 1024px) 40vw, 180px"
+            />
+            {(formatLabel || item.episode_count > 0 || statusLabel) && (
+              <div className="anime-card-badge">
+                {formatLabel && <span className="badge-format">{formatLabel}</span>}
+                {item.episode_count > 0 && !isMovieItem(item) && (
+                  <span className="badge-eps">{item.episode_count} EP</span>
+                )}
+                {statusLabel && <span className="badge-status">{statusLabel}</span>}
+              </div>
+            )}
           </div>
-        </div>
-      </Link>
-      <button
-        className="card-remove-button"
-        type="button"
-        onClick={() => onRemove(item)}
-        aria-label={`Remove ${item.title} from Watchlist`}
-      >
-        <CloseIcon />
-      </button>
+          <div className="anime-card-info">
+            <div className="anime-card-title">{item.title}</div>
+            <div className="anime-card-meta">
+              {item.rating && <span className="anime-card-rating"><StarIcon /> {item.rating}%</span>}
+              {item.year && <span>{item.year}</span>}
+            </div>
+          </div>
+        </Link>
+        <button
+          className="card-remove-button"
+          type="button"
+          onClick={() => onRemove(item)}
+          aria-label={`Remove ${item.title} from Watchlist`}
+        >
+          <CloseIcon />
+        </button>
+      </div>
     </div>
   );
 }
@@ -92,7 +101,13 @@ export default function WatchlistPage() {
         <div className="anime-grid">
           {Array(6).fill(0).map((_, i) => (
             <div key={i} className="anime-card">
-              <div className="skeleton" style={{ width: '100%', aspectRatio: '2/3' }} />
+              <div className="anime-card-surface">
+                <div className="anime-card-image-wrap skeleton" />
+                <div className="anime-card-info">
+                  <div className="skeleton anime-card-skeleton-title" />
+                  <div className="skeleton anime-card-skeleton-meta" />
+                </div>
+              </div>
             </div>
           ))}
         </div>

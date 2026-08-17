@@ -41,6 +41,7 @@
   --nav-height: 56px;
   --transition: 0.15s ease;
   --transition-slow: 0.3s ease;
+  --anime-card-poster-ratio: 3 / 4.2;
 }
 
 html {
@@ -642,9 +643,12 @@ main {
 
 .anime-row {
   display: flex;
+  align-items: flex-start;
   gap: 0.75rem;
   overflow-x: auto;
-  padding-bottom: 0.5rem;
+  /* Room for the hover scale so overflow-x clipping does not crop the pop. */
+  padding: 1.15rem 0.7rem 1.3rem;
+  margin: -1.15rem -0.7rem -0.8rem;
   scroll-snap-type: x mandatory;
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -652,6 +656,7 @@ main {
   overscroll-behavior-x: contain;
   touch-action: pan-x pan-y;
   cursor: grab;
+  isolation: isolate;
 }
 
 .anime-row::-webkit-scrollbar {
@@ -681,42 +686,98 @@ main {
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--bg-card);
-  transition: all var(--transition-slow);
   cursor: pointer;
 }
 
-.anime-card-link,
-.anime-card-image-link {
+.anime-row .anime-card {
+  width: 155px;
+}
+
+/* The outer card is a frozen hover target. The inner surface is what pops. */
+.anime-card:has(> .anime-card-surface) {
+  overflow: visible;
+  background: transparent;
+}
+
+.anime-card-surface {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-card);
+  transform: scale(1);
+  transform-origin: center center;
+  transition:
+    transform 0.22s cubic-bezier(0.34, 1.45, 0.64, 1),
+    box-shadow 0.22s ease;
+}
+
+.anime-card-link {
   display: block;
+  width: 100%;
   color: inherit;
-}
-
-.anime-card-image-link {
-  height: 100%;
-}
-
-.anime-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 0 16px rgba(192, 96, 255, 0.15);
 }
 
 .anime-card-image-wrap {
   position: relative;
+  flex: 0 0 auto;
+  width: 100%;
+  aspect-ratio: var(--anime-card-poster-ratio);
   overflow: hidden;
+  background: var(--bg-tertiary);
+}
+
+.anime-card-image-link {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  color: inherit;
 }
 
 .anime-card-image {
-  /* height: auto overrides the width/height attributes next/image renders,
-     so the card keeps its aspect-ratio-driven size at any column width. */
+  position: absolute;
+  inset: 0;
   width: 100%;
-  height: auto;
-  aspect-ratio: 3/4.2;
+  height: 100%;
   object-fit: cover;
-  transition: transform var(--transition-slow);
+  max-width: none;
 }
 
-.anime-card:hover .anime-card-image {
-  transform: scale(1.04);
+@media (hover: hover) and (pointer: fine) {
+  .anime-card:hover,
+  .anime-card:focus-within {
+    z-index: 20;
+  }
+
+  .anime-card:hover .anime-card-surface,
+  .anime-card:focus-within .anime-card-surface {
+    transform: scale(1.035);
+    box-shadow:
+      0 16px 36px rgba(0, 0, 0, 0.55),
+      0 0 0 1px rgba(192, 96, 255, 0.32),
+      0 0 28px rgba(192, 96, 255, 0.18);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anime-card-surface,
+  .anime-card-overlay {
+    transition: box-shadow var(--transition), opacity var(--transition);
+  }
+
+  .anime-card:hover .anime-card-surface,
+  .anime-card:focus-within .anime-card-surface {
+    transform: none;
+  }
+
+  .anime-card-overlay,
+  .anime-card:hover .anime-card-overlay,
+  .anime-card:focus-within .anime-card-overlay {
+    transform: none;
+  }
 }
 
 .anime-card-badge {
@@ -766,6 +827,8 @@ main {
 
 .anime-card-info {
   padding: 0.5rem 0.6rem;
+  display: flex;
+  flex-direction: column;
 }
 
 .anime-card-title {
@@ -777,6 +840,7 @@ main {
   -webkit-box-orient: vertical;
   overflow: hidden;
   line-height: 1.35;
+  min-height: calc(0.75rem * 1.35 * 2);
 }
 
 .anime-card-meta {
@@ -786,9 +850,13 @@ main {
   display: flex;
   gap: 0.4rem;
   align-items: center;
+  min-height: 0.85rem;
 }
 
 .anime-card-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
   color: var(--yellow);
   font-weight: 600;
 }
@@ -796,9 +864,12 @@ main {
 .anime-card-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, transparent 60%);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.82) 0%, transparent 58%);
   opacity: 0;
-  transition: opacity var(--transition);
+  transform: translateY(6px);
+  transition:
+    opacity 0.18s ease,
+    transform 0.22s cubic-bezier(0.34, 1.45, 0.64, 1);
   z-index: 2;
   display: flex;
   align-items: flex-end;
@@ -810,6 +881,7 @@ main {
 .anime-card:hover .anime-card-overlay,
 .anime-card:focus-within .anime-card-overlay {
   opacity: 1;
+  transform: translateY(0);
 }
 
 .anime-card-action-row {
@@ -843,8 +915,9 @@ main {
 }
 
 .continue-watching-card-link {
-  display: block;
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
   color: inherit;
 }
 
@@ -2281,10 +2354,15 @@ main {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
   gap: 0.75rem;
+  align-items: start;
+  isolation: isolate;
+  overflow: visible;
 }
 
 .anime-grid .anime-card {
   flex: none;
+  width: 100%;
+  min-width: 0;
 }
 
 @media (min-width: 1025px) {
@@ -3597,6 +3675,17 @@ textarea.form-input {
   border-radius: var(--radius-sm);
 }
 
+.anime-card-skeleton-title {
+  width: 80%;
+  height: 0.75rem;
+  margin-bottom: 0.45rem;
+}
+
+.anime-card-skeleton-meta {
+  width: 50%;
+  height: 0.65rem;
+}
+
 @keyframes shimmer {
   0% {
     background-position: 200% 0;
@@ -3995,6 +4084,10 @@ textarea.form-input {
 
   .anime-card {
     flex: 0 0 130px;
+  }
+
+  .anime-row .anime-card {
+    width: 130px;
   }
 
   .anime-grid {
