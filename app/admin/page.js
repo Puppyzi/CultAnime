@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   RefreshIcon,
   PlusIcon,
@@ -12,79 +13,20 @@ import {
   FolderIcon,
   CloseIcon,
 } from '../../components/Icons';
+import {
+  emptyEpisodeEditForm,
+  episodeToEditForm,
+  formatEpisodeDate,
+  formatEpisodeRuntime,
+  syncItemTypeLabel,
+  syncResultText,
+  syncUnit,
+} from '../../lib/admin-format';
 
-const emptyEpisodeEditForm = {
-  id: '',
-  episode_number: '',
-  title: '',
-  file_path: '',
-  air_date: '',
-  runtime_minutes: '',
-  overview: '',
-};
 const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION;
 
-function formatEpisodeDate(value) {
-  if (!value) return 'No date';
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.valueOf())) return value;
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
-}
-
-function formatEpisodeRuntime(seconds) {
-  if (!seconds) return 'No runtime';
-  const minutes = Math.max(1, Math.round(Number(seconds) / 60));
-  return `${minutes}m`;
-}
-
-function syncItemTypeLabel(item) {
-  return item?.item_type === 'movie' ? 'Movie' : 'Series';
-}
-
-function syncUnit(count, itemType) {
-  const value = Number(count) || 0;
-  const unit = itemType === 'movie' ? 'movie file' : 'episode';
-  return `${value} ${unit}${value === 1 ? '' : 's'}`;
-}
-
-function syncResultText(result) {
-  if (result.status === 'created') {
-    return `Created - ${syncUnit(result.episodes_added, result.item_type)}`;
-  }
-
-  if (result.status === 'updated') {
-    const parts = [
-      `${syncUnit(result.episodes_added, result.item_type)} new`,
-      `${result.episodes_updated || 0} refreshed`,
-    ];
-
-    if (result.episodes_removed) {
-      parts.push(`${syncUnit(result.episodes_removed, result.item_type)} removed`);
-    }
-
-    return `Updated - ${parts.join(', ')}`;
-  }
-
-  if (result.status === 'error') {
-    return `Error: ${result.error}`;
-  }
-
-  return result.status;
-}
-
-function episodeToEditForm(ep) {
-  return {
-    id: ep.id,
-    episode_number: String(ep.episode_number || ''),
-    title: ep.title || '',
-    file_path: ep.file_path || '',
-    air_date: ep.air_date || '',
-    runtime_minutes: ep.duration ? String(Math.max(1, Math.round(Number(ep.duration) / 60))) : '',
-    overview: ep.overview || '',
-  };
-}
-
 export default function AdminPage() {
+  const router = useRouter();
   const [tab, setTab] = useState('add');
   const [animeList, setAnimeList] = useState([]);
   const [selectedAnime, setSelectedAnime] = useState(null);
@@ -117,6 +59,8 @@ export default function AdminPage() {
   useEffect(() => {
     loadAnimeList();
     loadRescanStatus({ silent: true });
+    // Admin bootstrap is intentionally limited to the initial mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -125,6 +69,8 @@ export default function AdminPage() {
     loadRescanStatus({ silent: true });
     const interval = window.setInterval(() => loadRescanStatus({ silent: true }), 5000);
     return () => window.clearInterval(interval);
+    // Recreate polling only when entering or leaving the Sync tab.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
   async function loadAnimeList() {
@@ -487,7 +433,7 @@ export default function AdminPage() {
 
   async function logoutAdmin() {
     await fetch('/api/admin/auth', { method: 'DELETE' });
-    window.location.href = '/admin/login';
+    router.replace('/admin/login');
   }
 
   const tabs = [

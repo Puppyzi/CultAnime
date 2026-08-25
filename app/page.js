@@ -8,6 +8,8 @@ import ScrollRow from '../components/ScrollRow';
 import { AnimeCard, ContinueWatchingCard } from '../components/AnimeCard';
 import { PlayIcon, StarIcon, FlameIcon, FilmIcon } from '../components/Icons';
 import MobileDiscoveryRows from '../components/MobileDiscoveryRows';
+import { ErrorState, useToast } from '../components/Feedback';
+import { fetchJson } from '../lib/client-api';
 
 function SidebarPoster({ anime }) {
   if (!anime.cover_image) {
@@ -42,7 +44,7 @@ function HeroCarousel({ heroAnime, history }) {
     if (heroAnime.length <= 1) return;
 
     const intervalId = setInterval(() => {
-      goToNextHero();
+      setFeaturedIndex(current => (current + 1) % heroAnime.length);
     }, 6500);
 
     return () => clearInterval(intervalId);
@@ -176,24 +178,27 @@ function getHeroAnime(anime, history) {
 }
 
 export default function HomePage() {
+  const notify = useToast();
   const [anime, setAnime] = useState([]);
   const [history, setHistory] = useState([]);
   const [watchlistIds, setWatchlistIds] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
   const [removingEpisodeIds, setRemovingEpisodeIds] = useState({});
   const removingEpisodeIdsRef = useRef(new Set());
 
   useEffect(() => {
+    const controller = new AbortController();
     async function load() {
+      setLoading(true);
+      setError('');
       try {
-        const [animeRes, historyRes, watchlistRes] = await Promise.all([
-          fetch('/api/anime?sort=created_at&order=DESC&limit=500'),
-          fetch('/api/history'),
-          fetch('/api/watchlist'),
+        const [animeData, historyData, watchlistData] = await Promise.all([
+          fetchJson('/api/anime?sort=created_at&order=DESC&limit=100', { signal: controller.signal }),
+          fetchJson('/api/history', { signal: controller.signal }),
+          fetchJson('/api/watchlist', { signal: controller.signal }),
         ]);
-        const animeData = await animeRes.json();
-        const historyData = await historyRes.json();
-        const watchlistData = await watchlistRes.json();
         setAnime(animeData.anime || []);
         setHistory(historyData.history || []);
         setWatchlistIds(new Set(
@@ -201,11 +206,15 @@ export default function HomePage() {
             .filter(item => !item.episode_id)
             .map(item => String(item.anime_id))
         ));
-      } catch (e) { console.error(e); }
-      setLoading(false);
+      } catch (loadError) {
+        if (loadError.name !== 'AbortError') setError(loadError.message);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
     }
     load();
-  }, []);
+    return () => controller.abort();
+  }, [reloadKey]);
 
   const heroAnime = useMemo(() => getHeroAnime(anime, history), [anime, history]);
   const popular = useMemo(
@@ -235,7 +244,7 @@ export default function HomePage() {
 
       setHistory(current => current.filter(item => item.episode_id !== episodeId));
     } catch (error) {
-      console.error(error);
+      notify(error.message, 'error');
     } finally {
       removingEpisodeIdsRef.current.delete(episodeId);
       setRemovingEpisodeIds(current => {
@@ -243,20 +252,14 @@ export default function HomePage() {
         return remaining;
       });
     }
-  }, []);
+  }, [notify]);
 
   const updateWatchlist = useCallback(async (animeId, shouldAdd) => {
-    const res = await fetch('/api/watchlist', {
+    await fetchJson('/api/watchlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ anime_id: animeId, action: shouldAdd ? 'add' : 'remove' }),
     });
-    const data = await res.json();
-
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || 'Could not update the watchlist.');
-    }
-
     setWatchlistIds(current => {
       const next = new Set(current);
       if (shouldAdd) {
@@ -266,7 +269,8 @@ export default function HomePage() {
       }
       return next;
     });
-  }, []);
+    notify(shouldAdd ? 'Added to Watchlist.' : 'Removed from Watchlist.', 'success');
+  }, [notify]);
 
   if (loading) {
     return (
@@ -280,6 +284,10 @@ export default function HomePage() {
         </div>
       </div>
     );
+  }
+
+  if (error) {
+    return <ErrorState title="Could not load your library" message={error} onRetry={() => setReloadKey(key => key + 1)} />;
   }
 
   if (anime.length === 0) {

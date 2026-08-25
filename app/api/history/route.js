@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 import { getDb } from '../../../lib/db';
 import { createSessionCookie, getSessionId } from '../../../lib/session';
+import { parseHistoryInput } from '../../../lib/history-input';
 
 export async function GET(request) {
   try {
@@ -38,10 +39,23 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
+  }
+
+  const parsed = parseHistoryInput(body);
+  if (parsed.error) return NextResponse.json({ error: parsed.error }, { status: 400 });
+
   try {
     const sessionId = await getSessionId();
-    const { episode_id, anime_id, progress, duration, completed } = await request.json();
+    const { episodeId, animeId, progress, duration, completed } = parsed.value;
     const db = getDb();
+
+    const episode = db.prepare('SELECT id FROM episodes WHERE id = ? AND anime_id = ?').get(episodeId, animeId);
+    if (!episode) return NextResponse.json({ error: 'Episode not found for this anime.' }, { status: 404 });
 
     db.prepare(`
       INSERT INTO watch_history (session_id, episode_id, anime_id, progress, duration, completed, updated_at)
@@ -51,7 +65,7 @@ export async function POST(request) {
         duration = excluded.duration,
         completed = excluded.completed,
         updated_at = CURRENT_TIMESTAMP
-    `).run(sessionId, episode_id, anime_id, progress, duration || 0, completed ? 1 : 0);
+    `).run(sessionId, episodeId, animeId, progress, duration, completed ? 1 : 0);
 
     const response = NextResponse.json({ success: true });
     response.cookies.set(createSessionCookie(sessionId, request));

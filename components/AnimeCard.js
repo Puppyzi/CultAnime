@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { mediaFormatLabel } from '../lib/media-format';
 import { mediaStatusBadgeLabel } from '../lib/media-status';
 import { BookmarkIcon, CloseIcon, PlayIcon, StarIcon } from './Icons';
+import { useToast } from './Feedback';
 
 // Plays the card flip-out animation before navigating.
 // The destination route is prefetched on hover and at flip start so the
@@ -33,6 +34,7 @@ function useFlipNavigation(href) {
 const CARD_IMAGE_SIZES = '(max-width: 1024px) 40vw, 180px';
 
 export const AnimeCard = memo(function AnimeCard({ anime, inWatchlist = false, onWatchlistChange }) {
+  const notify = useToast();
   const href = `/anime/${anime.id}`;
   const watchHref = `/watch/${anime.id}/1`;
   const router = useRouter();
@@ -54,7 +56,7 @@ export const AnimeCard = memo(function AnimeCard({ anime, inWatchlist = false, o
     try {
       await onWatchlistChange(anime.id, !inWatchlist);
     } catch (error) {
-      console.error('Watchlist update failed:', error);
+      notify(error.message || 'Could not update the Watchlist.', 'error');
     } finally {
       watchlistActionRef.current = false;
       setWatchlistBusy(false);

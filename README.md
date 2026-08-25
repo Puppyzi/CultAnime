@@ -59,3 +59,15 @@ The admin Manage tab has two deletion paths. `Delete Local` only removes the Cul
 Request search and submit are anime-gated. By default, CultAnime only allows TV/movie results that are animation and have Japanese origin/language metadata from Seerr/TMDB. You can extend the accepted metadata with `SEERR_ANIME_ORIGIN_COUNTRIES=JP,CN,KR` or `SEERR_ANIME_LANGUAGES=ja,zh,ko` if your library should include donghua or Korean animation. Movie requests are sent to Seerr with `SEERR_ANIME_MOVIE_ROOT_FOLDER=/media/anime_movies`.
 
 For production, run CultAnime on the server that can reach Jellyfin, Seerr, SQLite storage, and the anime media mount. The included Docker files and production env example are the expected deployment path.
+
+## Health checks and database backups
+
+`GET /api/health` is a fast readiness check for the application and SQLite database. `GET /api/health?deep=1` also reports whether configured Jellyfin and Seerr services are reachable; external-service failures report a degraded state without making the CultAnime container unhealthy. Docker and Compose use the fast readiness check automatically.
+
+Create a transactionally consistent SQLite backup with:
+
+```bash
+npm run backup:db
+```
+
+Backups are written to `data/backups`, which is inside the persistent `/app/data` Docker volume. The newest 14 backups are retained by default; set `BACKUP_RETENTION` to change that number. For Docker deployments, run `docker exec cultanime node scripts/backup-db.mjs` from a daily host cron job or scheduler, and periodically copy backups to a different device.

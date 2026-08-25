@@ -6,6 +6,8 @@ import { mediaFormatLabel } from '../../lib/media-format';
 import { mediaStatusBadgeLabel } from '../../lib/media-status';
 import { StarIcon, CloseIcon, BookmarkIcon } from '../../components/Icons';
 import { ContinueWatchingCard } from '../../components/AnimeCard';
+import { ErrorState, useToast } from '../../components/Feedback';
+import { fetchJson } from '../../lib/client-api';
 
 function isMovieItem(item) {
   return String(item.format || '').toUpperCase() === 'MOVIE';
@@ -59,32 +61,42 @@ function WatchlistTitleCard({ item, onRemove }) {
 }
 
 export default function WatchlistPage() {
+  const notify = useToast();
   const [watchlist, setWatchlist] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    const controller = new AbortController();
     async function load() {
+      setLoading(true);
+      setError('');
       try {
-        const res = await fetch('/api/watchlist');
-        const data = await res.json();
+        const data = await fetchJson('/api/watchlist', { signal: controller.signal });
         setWatchlist(data.watchlist || []);
-      } catch (e) { console.error(e); }
-      setLoading(false);
+      } catch (loadError) {
+        if (loadError.name !== 'AbortError') setError(loadError.message);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
     }
     load();
-  }, []);
+    return () => controller.abort();
+  }, [reloadKey]);
 
   async function remove(item) {
-    await fetch('/api/watchlist', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        anime_id: item.anime_id,
-        episode_id: item.episode_id || undefined,
-        action: 'remove',
-      }),
-    });
-    setWatchlist(prev => prev.filter(entry => entry.id !== item.id));
+    try {
+      await fetchJson('/api/watchlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ anime_id: item.anime_id, episode_id: item.episode_id || undefined, action: 'remove' }),
+      });
+      setWatchlist(previous => previous.filter(entry => entry.id !== item.id));
+      notify('Removed from Watchlist.', 'success');
+    } catch (removeError) {
+      notify(removeError.message, 'error');
+    }
   }
 
   const titleItems = watchlist.filter(item => !item.episode_id);
@@ -97,7 +109,9 @@ export default function WatchlistPage() {
       <h1>My Watchlist</h1>
       <p className="subtitle">Series, movies, and episodes you saved</p>
 
-      {loading ? (
+      {error ? (
+        <ErrorState title="Could not load your Watchlist" message={error} onRetry={() => setReloadKey(key => key + 1)} />
+      ) : loading ? (
         <div className="anime-grid">
           {Array(6).fill(0).map((_, i) => (
             <div key={i} className="anime-card">

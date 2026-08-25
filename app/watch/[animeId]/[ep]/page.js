@@ -4,15 +4,29 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { InfoIcon, PlayIcon } from '../../../../components/Icons';
+import { ErrorState, useToast } from '../../../../components/Feedback';
+import { fetchJson } from '../../../../lib/client-api';
 import {
   chooseSubtitle,
   isJapaneseAudioTrack,
   requiresBurnedInSubtitle,
 } from '../../../../lib/track-selection';
+import {
+  AUDIO_PREF_KEY,
+  AUTOPLAY_NEXT_KEY,
+  PLAYER_VOLUME_KEY,
+  SUBTITLE_PREF_KEY,
+  readMediaPreference,
+  readNextAiringHidden,
+  readPlayerBoolean,
+  readPlayerNumber,
+  removeMediaPreference,
+  resumeSecondsFromHistory,
+  writeMediaPreference,
+  writeNextAiringHidden,
+  writePlayerSetting,
+} from '../../../../lib/player-preferences';
 
-const SUBTITLE_PREF_KEY = 'cultanime.subtitleTrack';
-const AUDIO_PREF_KEY = 'cultanime.audioTrack';
-const NEXT_AIRING_HIDDEN_KEY = 'cultanime.nextAiringHidden';
 const STALL_RECOVERY_DELAY_MS = 12000;
 const PLAYBACK_WATCHDOG_INTERVAL_MS = 4000;
 const PLAYBACK_WATCHDOG_PAUSED_MS = 8000;
@@ -34,71 +48,6 @@ function loadHls() {
     hlsModulePromise = import('hls.js').then(module => module.default);
   }
   return hlsModulePromise;
-}
-
-function mediaPreferenceKey(baseKey, animeId) {
-  return animeId ? `${baseKey}.${animeId}` : baseKey;
-}
-
-function readMediaPreference(baseKey, animeId) {
-  try {
-    const key = mediaPreferenceKey(baseKey, animeId);
-    const scoped = window.localStorage.getItem(key);
-    if (scoped !== null) return scoped;
-
-    const legacy = window.localStorage.getItem(baseKey);
-    if (legacy !== null && animeId) {
-      window.localStorage.setItem(key, legacy);
-      window.localStorage.removeItem(baseKey);
-      return legacy;
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function writeMediaPreference(baseKey, animeId, value) {
-  try {
-    window.localStorage.setItem(mediaPreferenceKey(baseKey, animeId), value);
-  } catch {
-    // Preference persistence is optional.
-  }
-}
-
-function removeMediaPreference(baseKey, animeId) {
-  try {
-    window.localStorage.removeItem(mediaPreferenceKey(baseKey, animeId));
-  } catch {
-    // Preference persistence is optional.
-  }
-}
-
-function readNextAiringHidden() {
-  try {
-    return window.sessionStorage.getItem(NEXT_AIRING_HIDDEN_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
-
-function writeNextAiringHidden(hidden) {
-  try {
-    if (hidden) {
-      window.sessionStorage.setItem(NEXT_AIRING_HIDDEN_KEY, 'true');
-    } else {
-      window.sessionStorage.removeItem(NEXT_AIRING_HIDDEN_KEY);
-    }
-  } catch {
-    // Temporary preference persistence is optional.
-  }
-}
-
-function resumeSecondsFromHistory(entry) {
-  const progress = Number(entry?.progress);
-  if (!Number.isFinite(progress) || progress < 5) return 0;
-  return progress;
 }
 
 function persistWatchProgress({ episodeId, animeId, currentTime, duration, useBeacon = false }) {
@@ -216,15 +165,16 @@ function formatCountdown(ms) {
 function NextAiringCountdown({ nextAiringEpisode, onDismiss }) {
   const airingAt = Number(nextAiringEpisode?.airingAt);
   const episode = Number(nextAiringEpisode?.episode);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(0);
 
   useEffect(() => {
     if (!Number.isFinite(airingAt)) return undefined;
+    setNow(Date.now());
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(interval);
   }, [airingAt]);
 
-  if (!Number.isFinite(airingAt) || airingAt <= 0) return null;
+  if (!Number.isFinite(airingAt) || airingAt <= 0 || now === 0) return null;
 
   const releaseMs = airingAt * 1000;
   const remainingMs = releaseMs - now;
@@ -946,7 +896,7 @@ function formatBytes(bytes) {
   return `${value.toFixed(decimals)} ${units[unitIndex]}`;
 }
 
-function MediaDropdown({ label, value, options, disabled, onChange }) {
+function MediaDropdown({ label, value, options, disabled, onChange, compact = false }) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
   const selectedOption = options.find(option => option.value === value) || options[0];
@@ -971,7 +921,7 @@ function MediaDropdown({ label, value, options, disabled, onChange }) {
   }
 
   return (
-    <div className="media-picker">
+    <div className={`media-picker${compact ? ' media-picker-compact' : ''}`}>
       <span>{label}</span>
       <div className={`media-dropdown${open ? ' open' : ''}`} ref={dropdownRef}>
         <button
@@ -1188,6 +1138,7 @@ function PlayerDownloadConfirm({ episodeId }) {
 export default function WatchPage() {
   const { animeId, ep } = useParams();
   const router = useRouter();
+  const notify = useToast();
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const saveInterval = useRef(null);
@@ -1197,6 +1148,8 @@ export default function WatchPage() {
   const [anime, setAnime] = useState(null);
   const [currentEp, setCurrentEp] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [loadReloadKey, setLoadReloadKey] = useState(0);
   const [streamError, setStreamError] = useState(null);
   const [streamLoading, setStreamLoading] = useState(false);
   const [streamReloadKey, setStreamReloadKey] = useState(0);
@@ -1209,6 +1162,9 @@ export default function WatchPage() {
   const [inWatchlist, setInWatchlist] = useState(false);
   const [watchlistBusy, setWatchlistBusy] = useState(false);
   const [nextAiringHidden, setNextAiringHidden] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [autoplayNext, setAutoplayNext] = useState(true);
+  const [showShortcutHelp, setShowShortcutHelp] = useState(false);
 
   const animeIdNumber = Number.parseInt(animeId, 10);
   const episodeNum = parseInt(ep);
@@ -1238,6 +1194,42 @@ export default function WatchPage() {
     setSelectedSubtitle(readMediaPreference(SUBTITLE_PREF_KEY, animeId) || 'auto');
     setSubtitleMode('soft');
   }, [animeId]);
+
+  useEffect(() => {
+    setPlaybackRate(1);
+    setAutoplayNext(readPlayerBoolean(AUTOPLAY_NEXT_KEY, true));
+  }, []);
+
+  useEffect(() => {
+    function handlePlayerShortcut(event) {
+      const tag = event.target?.tagName;
+      if (event.target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'VIDEO'].includes(tag)) return;
+      const video = videoRef.current;
+      if (event.key === '?') {
+        event.preventDefault();
+        setShowShortcutHelp(current => !current);
+      } else if (event.key === 'Escape') {
+        setShowShortcutHelp(false);
+      } else if (video && (event.key === ' ' || event.key.toLowerCase() === 'k')) {
+        event.preventDefault();
+        if (video.paused) video.play().catch(() => {}); else video.pause();
+      } else if (video && event.key === 'ArrowLeft') {
+        event.preventDefault();
+        video.currentTime = Math.max(0, video.currentTime - 10);
+      } else if (video && event.key === 'ArrowRight') {
+        event.preventDefault();
+        video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10);
+      } else if (video && event.key.toLowerCase() === 'm') {
+        event.preventDefault();
+        video.muted = !video.muted;
+      } else if (video && event.key.toLowerCase() === 'f') {
+        event.preventDefault();
+        if (document.fullscreenElement) document.exitFullscreen?.(); else video.requestFullscreen?.();
+      }
+    }
+    document.addEventListener('keydown', handlePlayerShortcut);
+    return () => document.removeEventListener('keydown', handlePlayerShortcut);
+  }, []);
 
   useEffect(() => {
     setNextAiringHidden(readNextAiringHidden());
@@ -1338,6 +1330,7 @@ export default function WatchPage() {
     let active = true;
 
     setLoading(true);
+    setLoadError('');
     setCurrentEp(null);
     setStreamError(null);
     setAudioTracks([]);
@@ -1347,8 +1340,7 @@ export default function WatchPage() {
 
     async function load() {
       try {
-        const res = await fetch(`/api/anime/${animeId}`);
-        const data = await res.json();
+        const data = await fetchJson(`/api/anime/${animeId}`);
         if (!active) return;
         setAnime(data);
         const episodes = data.episodes || [];
@@ -1380,7 +1372,9 @@ export default function WatchPage() {
         }
 
         setCurrentEp(episode);
-      } catch (e) { console.error(e); }
+      } catch (error) {
+        if (active) setLoadError(error.message);
+      }
       if (active) {
         setLoading(false);
       }
@@ -1390,7 +1384,7 @@ export default function WatchPage() {
     return () => {
       active = false;
     };
-  }, [animeId, episodeNum]);
+  }, [animeId, episodeNum, loadReloadKey, router]);
 
   useEffect(() => {
     let active = true;
@@ -1839,6 +1833,8 @@ export default function WatchPage() {
       stopPlaybackKeepAlive();
       teardownPlayer(ownedVideo);
     };
+    // Soft subtitle changes are applied by the following effect and must not rebuild the HLS stream.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentEp, selectedAudioTrack, subtitleMode, burnedSubtitleKey, teardownPlayer, animeId, streamReloadKey, reportPlayerEvent, buildPlayerEventPayload, rememberCurrentPlaybackPosition]);
 
   useEffect(() => {
@@ -1881,6 +1877,29 @@ export default function WatchPage() {
     } else {
       writeMediaPreference(AUDIO_PREF_KEY, animeId, nextAudioTrack);
     }
+  }
+
+  function applyPlayerPreferences(event) {
+    const video = event.currentTarget;
+    const savedVolume = readPlayerNumber(PLAYER_VOLUME_KEY, 1, { min: 0, max: 1 });
+    video.volume = savedVolume;
+    video.playbackRate = 1;
+    setPlaybackRate(1);
+  }
+
+  function handlePlaybackRateChange(nextRate) {
+    const rate = Number(nextRate);
+    if (!Number.isFinite(rate)) return;
+    setPlaybackRate(rate);
+    if (videoRef.current) videoRef.current.playbackRate = rate;
+  }
+
+  function toggleAutoplayNext() {
+    setAutoplayNext(current => {
+      const next = !current;
+      writePlayerSetting(AUTOPLAY_NEXT_KEY, next);
+      return next;
+    });
   }
 
   const saveProgress = useCallback(async (options) => {
@@ -1943,8 +1962,9 @@ export default function WatchPage() {
       }
 
       setInWatchlist(nextWatchlistState);
+      notify(nextWatchlistState ? 'Episode saved to Watchlist.' : 'Episode removed from Watchlist.', 'success');
     } catch (error) {
-      console.error('Watchlist update failed:', error);
+      notify(error.message || 'Watchlist update failed.', 'error');
     } finally {
       setWatchlistBusy(false);
     }
@@ -1984,6 +2004,10 @@ export default function WatchPage() {
     </div>;
   }
 
+  if (loadError) {
+    return <ErrorState title="Could not load this episode" message={loadError} onRetry={() => setLoadReloadKey(key => key + 1)} />;
+  }
+
   if (!anime || !currentEp) {
     return <div className="empty-state" style={{ paddingTop: '8rem' }}>
       <h3>Episode not found</h3>
@@ -1993,6 +2017,23 @@ export default function WatchPage() {
 
   return (
     <div className="player-page">
+      {showShortcutHelp && (
+        <div className="shortcut-help-backdrop" role="presentation" onMouseDown={() => setShowShortcutHelp(false)}>
+          <div className="shortcut-help" role="dialog" aria-modal="true" aria-labelledby="shortcut-help-title" onMouseDown={event => event.stopPropagation()}>
+            <div className="shortcut-help-header">
+              <h2 id="shortcut-help-title">Player shortcuts</h2>
+              <button type="button" className="close-btn" onClick={() => setShowShortcutHelp(false)} aria-label="Close shortcuts">×</button>
+            </div>
+            <dl>
+              <div><dt>Space / K</dt><dd>Play or pause</dd></div>
+              <div><dt>← / →</dt><dd>Skip 10 seconds</dd></div>
+              <div><dt>M</dt><dd>Mute or unmute</dd></div>
+              <div><dt>F</dt><dd>Toggle fullscreen</dd></div>
+              <div><dt>?</dt><dd>Show this help</dd></div>
+            </dl>
+          </div>
+        </div>
+      )}
       <div className="player-main">
         <div className="video-container">
           {streamError ? (
@@ -2027,7 +2068,12 @@ export default function WatchPage() {
                 // the user back into the native player after they exit it.
                 playsInline
                 preload="none"
-                onEnded={() => { saveProgress(); if (nextEp) router.push(`/watch/${animeId}/${nextEp.episode_number}`); }}
+                onLoadedMetadata={applyPlayerPreferences}
+                onVolumeChange={event => writePlayerSetting(PLAYER_VOLUME_KEY, event.currentTarget.volume)}
+                onRateChange={event => {
+                  setPlaybackRate(event.currentTarget.playbackRate);
+                }}
+                onEnded={() => { saveProgress(); if (autoplayNext && nextEp) router.push(`/watch/${animeId}/${nextEp.episode_number}`); }}
                 onPause={saveProgress}
                 crossOrigin="anonymous"
               />
@@ -2052,8 +2098,7 @@ export default function WatchPage() {
                   onDismiss={handleNextAiringDismiss}
                 />
               )}
-              {(audioTracks.length > 1 || subtitles.length > 0) && (
-                <div className="media-controls">
+              <div className="media-controls">
                   {audioTracks.length > 1 && (
                     <MediaDropdown
                       label="Audio"
@@ -2084,8 +2129,18 @@ export default function WatchPage() {
                       ]}
                     />
                   )}
-                </div>
-              )}
+                <MediaDropdown
+                  label="Speed"
+                  compact
+                  value={String(playbackRate)}
+                  onChange={handlePlaybackRateChange}
+                  options={[0.5, 0.75, 1, 1.25, 1.5, 2].map(rate => ({ value: String(rate), label: `${rate}×` }))}
+                />
+                <button type="button" className={`btn btn-sm autoplay-toggle ${autoplayNext ? 'btn-primary' : 'btn-secondary'}`} onClick={toggleAutoplayNext} aria-pressed={autoplayNext}>
+                  Autoplay {autoplayNext ? 'On' : 'Off'}
+                </button>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowShortcutHelp(true)} aria-label="Show player keyboard shortcuts">?</button>
+              </div>
             </div>
           </div>
           <div className="player-episode-summary">

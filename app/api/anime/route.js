@@ -4,17 +4,24 @@ import { reconcileForRead } from '../../../lib/library-reconciler';
 
 export const dynamic = 'force-dynamic';
 
+function escapeLike(value) {
+  return String(value).replace(/[\\%_]/g, character => `\\${character}`);
+}
+
 export async function GET(request) {
   try {
     await reconcileForRead();
 
     const db = getDb();
     const { searchParams } = new URL(request.url);
-    const genre = searchParams.get('genre');
+    const genre = searchParams.get('genre')?.trim();
+    const search = searchParams.get('q')?.trim();
     const sort = searchParams.get('sort') || 'created_at';
     const order = searchParams.get('order') || 'DESC';
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const parsedPage = Number.parseInt(searchParams.get('page') || '1', 10);
+    const parsedLimit = Number.parseInt(searchParams.get('limit') || '20', 10);
+    const page = Number.isFinite(parsedPage) ? Math.max(1, parsedPage) : 1;
+    const limit = Number.isFinite(parsedLimit) ? Math.min(100, Math.max(1, parsedLimit)) : 20;
     const offset = (page - 1) * limit;
 
     let query = `
@@ -25,11 +32,27 @@ export async function GET(request) {
     `;
     let countQuery = 'SELECT COUNT(*) as total FROM anime';
     const queryParams = [];
+    const where = [];
 
     if (genre) {
-      query += ' WHERE genres LIKE ?';
-      countQuery += ' WHERE genres LIKE ?';
+      where.push('genres LIKE ?');
       queryParams.push(`%"${genre}"%`);
+    }
+
+    if (search) {
+      const term = `%${escapeLike(search)}%`;
+      where.push(`(
+        title LIKE ? ESCAPE '\\'
+        OR title_romaji LIKE ? ESCAPE '\\'
+        OR title_english LIKE ? ESCAPE '\\'
+      )`);
+      queryParams.push(term, term, term);
+    }
+
+    if (where.length > 0) {
+      const clause = ` WHERE ${where.join(' AND ')}`;
+      query += clause;
+      countQuery += clause;
     }
 
     const validSorts = ['created_at', 'title', 'rating', 'year'];

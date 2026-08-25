@@ -2,6 +2,8 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { ErrorState, useToast } from '../../../components/Feedback';
+import { fetchJson } from '../../../lib/client-api';
 import { PlayIcon, StarIcon } from '../../../components/Icons';
 
 const TICKS_PER_SECOND = 10000000;
@@ -297,9 +299,12 @@ function SeriesDownloadConfirm({ animeId }) {
 
 export default function AnimeDetailPage() {
   const { id } = useParams();
+  const notify = useToast();
   const [anime, setAnime] = useState(null);
   const [inWatchlist, setInWatchlist] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
   const [watchlistBusy, setWatchlistBusy] = useState(false);
   const [episodeSort, setEpisodeSort] = useState('Oldest');
   const watchlistActionRef = useRef(false);
@@ -313,20 +318,25 @@ export default function AnimeDetailPage() {
 
 
   useEffect(() => {
+    const controller = new AbortController();
     async function load() {
+      setLoading(true);
+      setLoadError('');
       try {
-        const res = await fetch(`/api/anime/${id}`);
-        const data = await res.json();
+        const data = await fetchJson(`/api/anime/${id}`, { signal: controller.signal });
         setAnime(data);
 
-        const wlRes = await fetch('/api/watchlist');
-        const wlData = await wlRes.json();
+        const wlData = await fetchJson('/api/watchlist', { signal: controller.signal });
         setInWatchlist(wlData.watchlist?.some(w => w.anime_id === parseInt(id) && !w.episode_id));
-      } catch (e) { console.error(e); }
-      setLoading(false);
+      } catch (error) {
+        if (error.name !== 'AbortError') setLoadError(error.message);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
     }
     load();
-  }, [id]);
+    return () => controller.abort();
+  }, [id, reloadKey]);
 
   useEffect(() => {
     watchlistRequestIdRef.current += 1;
@@ -352,23 +362,18 @@ export default function AnimeDetailPage() {
     setWatchlistBusy(true);
 
     try {
-      const res = await fetch('/api/watchlist', {
+      await fetchJson('/api/watchlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ anime_id: animeId, action }),
       });
-      const data = await res.json();
-
       if (watchlistRequestIdRef.current !== requestId) return;
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Could not update the watchlist.');
-      }
-
       setInWatchlist(action === 'add');
+      notify(action === 'add' ? 'Added to Watchlist.' : 'Removed from Watchlist.', 'success');
     } catch (error) {
       if (watchlistRequestIdRef.current === requestId) {
-        console.error(error);
+        notify(error.message, 'error');
       }
     } finally {
       if (watchlistRequestIdRef.current === requestId) {
@@ -389,6 +394,8 @@ export default function AnimeDetailPage() {
       </div>
     );
   }
+
+  if (loadError) return <ErrorState title="Could not load this anime" message={loadError} onRetry={() => setReloadKey(key => key + 1)} />;
 
   if (!anime) return <div className="empty-state"><h3>Anime not found</h3></div>;
 

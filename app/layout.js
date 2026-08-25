@@ -1,5 +1,6 @@
 import './globals.css';
 import Navbar from '../components/Navbar';
+import { ToastProvider } from '../components/Feedback';
 
 export const metadata = {
   title: 'CultAnime',
@@ -8,13 +9,15 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
+    <html lang="en" data-scroll-behavior="smooth">
       <body suppressHydrationWarning>
-        <Navbar />
-        <main>{children}</main>
-        <footer className="footer">
-          <p>cultAnime &copy; {new Date().getFullYear()} — Self-hosted anime streaming</p>
-        </footer>
+        <ToastProvider>
+          <Navbar />
+          <main>{children}</main>
+          <footer className="footer">
+            <p>cultAnime &copy; {new Date().getFullYear()} — Self-hosted anime streaming</p>
+          </footer>
+        </ToastProvider>
       </body>
     </html>
   );

@@ -41,9 +41,15 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 });
+  }
+
   try {
     const sessionId = await getSessionId();
-    const body = await request.json();
     const animeId = Number(body?.anime_id);
     const episodeId = body?.episode_id == null ? null : Number(body.episode_id);
     const action = body?.action === 'remove' ? 'remove' : 'add';

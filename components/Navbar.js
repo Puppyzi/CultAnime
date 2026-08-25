@@ -2,20 +2,25 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { CloseIcon, MenuIcon, SearchIcon } from './Icons';
+import { fetchJson } from '../lib/client-api';
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [activeResult, setActiveResult] = useState(-1);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navRef = useRef(null);
   const menuButtonRef = useRef(null);
   const firstNavLinkRef = useRef(null);
   const shouldFocusFirstNavLinkRef = useRef(false);
   const searchRef = useRef(null);
-  const debounceRef = useRef(null);
 
   useEffect(() => {
     function handlePointerDown(e) {
@@ -56,19 +61,60 @@ export default function Navbar() {
   }, [isMenuOpen]);
 
   useEffect(() => {
-    if (!query.trim()) { setResults([]); setShowDropdown(false); return; }
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+      setResults([]);
+      setShowDropdown(false);
+      setSearchLoading(false);
+      setSearchError('');
+      return;
+    }
+
+    const controller = new AbortController();
+    setSearchLoading(true);
+    setSearchError('');
+    setActiveResult(-1);
+    setShowDropdown(true);
+    const timer = window.setTimeout(async () => {
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-        const data = await res.json();
+        const data = await fetchJson(`/api/search?q=${encodeURIComponent(trimmedQuery)}`, { signal: controller.signal });
         setResults(data.anime || []);
-        setShowDropdown(true);
-      } catch (e) { console.error(e); }
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          setResults([]);
+          setSearchError(error.message);
+        }
+      } finally {
+        if (!controller.signal.aborted) setSearchLoading(false);
+      }
     }, 300);
 
-    return () => clearTimeout(debounceRef.current);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
   }, [query]);
+
+  function openResult(result) {
+    if (!result) return;
+    setShowDropdown(false);
+    setQuery('');
+    router.push(`/anime/${result.id}`);
+  }
+
+  function handleSearchKeyDown(event) {
+    if (!showDropdown) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveResult(current => Math.min(results.length - 1, current + 1));
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveResult(current => Math.max(-1, current - 1));
+    } else if (event.key === 'Enter' && activeResult >= 0) {
+      event.preventDefault();
+      openResult(results[activeResult]);
+    }
+  }
 
   const navLinks = [
     { href: '/', label: 'Home' },
@@ -124,20 +170,33 @@ export default function Navbar() {
       <div className="navbar-search" ref={searchRef}>
         <span className="search-icon"><SearchIcon /></span>
         <input
-          type="text" placeholder="Search anime..." aria-label="Search anime"
+          type="search" placeholder="Search anime..." aria-label="Search anime"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-controls="navbar-search-results"
+          aria-expanded={showDropdown}
+          aria-activedescendant={activeResult >= 0 ? `navbar-search-result-${results[activeResult]?.id}` : undefined}
           value={query} onChange={e => setQuery(e.target.value)}
+          onKeyDown={handleSearchKeyDown}
           onFocus={() => {
             setIsMenuOpen(false);
             if (results.length > 0) setShowDropdown(true);
           }}
         />
-        {showDropdown && results.length > 0 && (
-          <div className="search-dropdown">
+        {showDropdown && (
+          <div id="navbar-search-results" className="search-dropdown" role="listbox" aria-label="Anime search results">
+            {searchLoading && <p className="search-dropdown-status">Searching…</p>}
+            {!searchLoading && searchError && <p className="search-dropdown-status search-dropdown-error">Search is unavailable. Try again.</p>}
+            {!searchLoading && !searchError && results.length === 0 && <p className="search-dropdown-status">No anime found.</p>}
             {results.map(a => (
               <Link
                 key={a.id}
+                id={`navbar-search-result-${a.id}`}
                 href={`/anime/${a.id}`}
-                className="search-result"
+                role="option"
+                aria-selected={results[activeResult]?.id === a.id}
+                className={`search-result${results[activeResult]?.id === a.id ? ' active' : ''}`}
+                onMouseEnter={() => setActiveResult(results.indexOf(a))}
                 onClick={() => { setShowDropdown(false); setQuery(''); }}
               >
                 {a.cover_image && <img src={a.cover_image} alt={a.title} />}
