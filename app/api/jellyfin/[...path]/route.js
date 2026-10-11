@@ -77,6 +77,10 @@ function buildResponseHeaders(upstreamResponse, { rewrittenPlaylist = false } = 
   }
 
   headers.set('cache-control', 'no-store, max-age=0');
+  // Cast receivers fetch signed media URLs without the sender's cookies.
+  // Signatures still authorize each request; no credentials are exposed.
+  headers.set('access-control-allow-origin', '*');
+  headers.set('access-control-expose-headers', 'Content-Length, Content-Range, Accept-Ranges');
 
   return headers;
 }
@@ -175,4 +179,16 @@ export async function GET(request, { params }) {
 
 export async function HEAD(request, { params }) {
   return proxyJellyfin(request, params, 'HEAD');
+}
+
+export function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+      'Access-Control-Allow-Headers': 'Range, If-Range, If-None-Match, If-Modified-Since',
+      'Access-Control-Max-Age': '600',
+    },
+  });
 }
