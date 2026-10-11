@@ -12,6 +12,10 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+The watch page uses Video.js 10 React controls over the existing Jellyfin/hls.js
+playback pipeline. See [the player migration report](docs/videojs-migration.md)
+for the implementation details, automated checks, and manual testing checklist.
+
 ## Local Dev vs Server Deployment
 
 CultAnime has two expected modes.
