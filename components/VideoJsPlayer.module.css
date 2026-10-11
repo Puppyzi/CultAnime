@@ -282,14 +282,14 @@
 }
 .menuContent {
   position: absolute;
-  /* Keep content at its natural height while the outer popup animates.
-     Stretching it to the popup's intermediate height flashes a scrollbar. */
+  /* Wrapped track names can exceed the measured popup height. Keep the
+     scroll viewport inside the visible panel so every option is reachable. */
   inset: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 5px;
-  max-height: inherit;
+  max-height: 100%;
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -373,6 +373,7 @@
   rotate: 180deg;
 }
 .menuOptions {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -388,38 +389,6 @@
 }
 .menuRow[aria-checked='true'] .menuCheck {
   opacity: 1;
-}
-.menuSeparator {
-  flex-shrink: 0;
-  height: 1px;
-  margin: 3px 8px;
-  background: #ffffff18;
-}
-.menuSwitch {
-  flex-shrink: 0;
-  width: 26px;
-  height: 16px;
-  margin-left: auto;
-  padding: 2px;
-  border-radius: 10px;
-  background: #ffffff30;
-  transition: background-color 150ms;
-}
-.menuSwitch::before {
-  content: '';
-  display: block;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #fff;
-  transition: translate 150ms;
-}
-.menuRow[aria-checked='true'] .menuSwitch {
-  background: #fff;
-}
-.menuRow[aria-checked='true'] .menuSwitch::before {
-  background: #242828;
-  translate: 10px 0;
 }
 .buffering,
 .loading {
@@ -500,9 +469,7 @@
   .settingsIcon,
   .settings,
   .menuContent,
-  .menuRow,
-  .menuSwitch,
-  .menuSwitch::before {
+  .menuRow {
     transition: none;
   }
   .spinner {

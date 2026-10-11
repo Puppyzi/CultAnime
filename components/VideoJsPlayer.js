@@ -232,8 +232,6 @@ export default function VideoJsPlayer({
                       onSubtitleChange={onSubtitleChange}
                       playbackRate={playbackRate}
                       onPlaybackRateChange={onPlaybackRateChange}
-                      autoplayNext={autoplayNext}
-                      onAutoplayNextChange={onAutoplayNextChange}
                       streamLoading={streamLoading}
                     />
                     <AirPlayButton className={styles.button} title="AirPlay">

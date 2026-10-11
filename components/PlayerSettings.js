@@ -6,7 +6,6 @@ import {
   CheckIcon,
   ChevronIcon,
   GearIcon,
-  PlayIcon,
   SpeedIcon,
   VolumeHighIcon,
 } from '@videojs/react/icons';
@@ -79,8 +78,6 @@ export default function PlayerSettings({
   onSubtitleChange,
   playbackRate,
   onPlaybackRateChange,
-  autoplayNext,
-  onAutoplayNextChange,
   streamLoading,
 }) {
   const casting = usePlayer((state) => state.remotePlaybackState !== 'disconnected');
@@ -138,17 +135,6 @@ export default function PlayerSettings({
               label: `${rate}×`,
             }))}
           />
-          <Menu.Separator className={styles.menuSeparator} />
-          <Menu.CheckboxItem
-            className={styles.menuRow}
-            checked={autoplayNext}
-            onCheckedChange={onAutoplayNextChange}
-            aria-label="Autoplay next episode"
-          >
-            <PlayIcon />
-            <span>Autoplay next episode</span>
-            <span className={styles.menuSwitch} aria-hidden="true" />
-          </Menu.CheckboxItem>
         </Menu.Content>
       </Menu.Popup>
     </Menu.Root>

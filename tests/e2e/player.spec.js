@@ -183,11 +183,12 @@ test('mobile settings stay usable and autoplay preference controls episode navig
   await page.screenshot({ path: testInfo.outputPath('mobile-speed.png'), fullPage: true });
   await page.getByRole('menuitemradio', { name: '2×', exact: true }).click();
   await expect.poll(() => video.evaluate((element) => element.playbackRate)).toBe(2);
-  await page.getByRole('menuitemcheckbox', { name: 'Autoplay next episode' }).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('switch', { name: 'Autoplay next episode' }).click();
   await video.evaluate((element) => element.dispatchEvent(new Event('ended')));
   await expect(page).toHaveURL(/\/watch\/9001\/1$/);
-  await openSettings(page);
-  await page.getByRole('menuitemcheckbox', { name: 'Autoplay next episode' }).click();
+  await page.locator('[data-cultanime-player]').hover();
+  await page.getByRole('switch', { name: 'Autoplay next episode' }).click();
   await video.evaluate((element) => element.dispatchEvent(new Event('ended')));
   await expect(page).toHaveURL(/\/watch\/9001\/2$/);
   await expect(page.getByRole('heading', { name: 'Test episode 2', exact: true })).toBeVisible();
@@ -278,4 +279,27 @@ test('supports seeking, mute, volume and help without triggering playback shortc
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog', { name: 'Player shortcuts' })).toBeHidden();
   expect(state.errors).toEqual([]);
+});
+
+test('wrapped subtitle options scroll within the settings popup', async ({ page }) => {
+  await preparePlayer(page);
+  await openPlayer(page);
+  await openSettings(page);
+  await page.getByRole('menuitem', { name: 'Subtitles', exact: true }).click();
+  const menu = page.getByRole('menu', { name: 'Subtitles', exact: true });
+  await menu.evaluate((element) => {
+    for (const label of element.querySelectorAll('[role=menuitemradio] > span:first-child')) {
+      label.textContent = 'Full Subtitles [9volt] - English - Default - Forced - ASS';
+    }
+  });
+  await expect.poll(() => menu.evaluate((element) => {
+    const popup = element.parentElement.getBoundingClientRect();
+    return element.getBoundingClientRect().bottom <= popup.bottom + 1;
+  })).toBe(true);
+  await menu.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+  await expect.poll(() => menu.evaluate((element) => {
+    const last = element.querySelector('[role=menuitemradio]:last-child').getBoundingClientRect();
+    const viewport = element.getBoundingClientRect();
+    return last.bottom <= viewport.bottom + 1 && last.top >= viewport.top;
+  })).toBe(true);
 });
