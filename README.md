@@ -4,11 +4,17 @@ CultAnime is a self-hosted anime streaming UI backed by Jellyfin metadata, local
 
 ## Getting Started
 
-Run the development server:
+Install the branch's dependencies, then run the development server:
 
 ```bash
+npm install
 npm run dev
 ```
+
+Run `npm install` again after switching branches that change `package-lock.json`.
+The Video.js branch requires `@videojs/react`; an older `node_modules` directory
+will cause a `Module not found: Can't resolve '@videojs/react'` build error.
+If the dev server was already running during installation, restart it.
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 

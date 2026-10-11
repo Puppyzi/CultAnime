@@ -12,13 +12,14 @@ import {
   MuteButton,
   PiPButton,
   PlayButton,
-  Popover,
   SeekButton,
   StatusAnnouncer,
   Time,
   TimeSlider,
   VolumeSlider,
 } from '@videojs/react';
+import PlayerSettings from './PlayerSettings';
+import PlayerCasting, { PlayerStoreBridge } from './PlayerCasting';
 import { Video, VideoPlayer } from '@videojs/react/video';
 import styles from './VideoJsPlayer.module.css';
 
@@ -48,13 +49,6 @@ function Icon({ name }) {
         <path d="M12 12h6v5h-6z" />
       </>
     ),
-    settings: (
-      <>
-        <path d="M4 7h16M4 17h16" />
-        <circle cx="9" cy="7" r="3" />
-        <circle cx="15" cy="17" r="3" />
-      </>
-    ),
     next: (
       <>
         <path d="m5 5 11 7-11 7ZM19 5v14" />
@@ -76,31 +70,13 @@ function Icon({ name }) {
   );
 }
 
-function TrackSelect({ label, value, options, disabled, onChange }) {
-  return (
-    <label className={styles.setting}>
-      <span>{label}</span>
-      <select
-        aria-label={label}
-        value={value}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
 // Video.js owns the controls, accessibility, fullscreen and interaction state.
 // The watch page owns the media source and its single hls.js instance: Jellyfin
 // track changes negotiate new sessions and cannot use manifest-only track menus.
 export default function VideoJsPlayer({
   videoRef,
+  playerStoreRef,
+  castSource,
   title,
   audioTracks,
   selectedAudioTrack,
@@ -112,7 +88,6 @@ export default function VideoJsPlayer({
   onPlaybackRateChange,
   autoplayNext,
   onAutoplayNextChange,
-  onShowShortcuts,
   shortcutsOpen,
   onNextEpisode,
   streamLoading,
@@ -123,12 +98,14 @@ export default function VideoJsPlayer({
   const [settingsOpen, setSettingsOpen] = useState(false);
   return (
     <VideoPlayer title={title}>
+      <PlayerStoreBridge playerStoreRef={playerStoreRef} />
       <Container className={styles.player} data-cultanime-player="videojs" aria-label={title}>
         <Video
           ref={videoRef}
           className={styles.video}
           playsInline
-          preload="none"
+          // Native sources need metadata to restore position after a paused track change.
+          preload="metadata"
           crossOrigin="anonymous"
           {...videoProps}
         />
@@ -227,67 +204,42 @@ export default function VideoJsPlayer({
                         <Icon name="next" />
                       </button>
                     )}
-                    <Popover.Root side="top" align="end" onOpenChange={setSettingsOpen}>
-                      <Popover.Trigger
-                        className={styles.button}
-                        aria-label="Player settings"
-                        title="Player settings"
-                      >
-                        <Icon name="settings" />
-                      </Popover.Trigger>
-                      <Popover.Popup className={styles.settings} aria-label="Player settings">
-                        <strong>Playback settings</strong>
-                        {audioTracks.length > 1 && (
-                          <TrackSelect
-                            label="Audio"
-                            value={selectedAudioTrack}
-                            disabled={streamLoading}
-                            onChange={onAudioChange}
-                            options={[
-                              { value: 'default', label: 'Default' },
-                              ...audioTracks.map((track) => ({
-                                value: String(track.index),
-                                label: track.title || track.language || `Audio ${track.index}`,
-                              })),
-                            ]}
-                          />
-                        )}
-                        {subtitles.length > 0 && (
-                          <TrackSelect
-                            label="Subtitles"
-                            value={selectedSubtitle}
-                            disabled={streamLoading}
-                            onChange={onSubtitleChange}
-                            options={[
-                              { value: 'off', label: 'Off' },
-                              ...subtitles.map((track) => ({
-                                value: String(track.index),
-                                label: track.title || track.language || `Subtitle ${track.index}`,
-                              })),
-                            ]}
-                          />
-                        )}
-                        <TrackSelect
-                          label="Speed"
-                          value={String(playbackRate)}
-                          onChange={onPlaybackRateChange}
-                          options={[0.5, 0.75, 1, 1.25, 1.5, 2].map((rate) => ({
-                            value: String(rate),
-                            label: `${rate}×`,
-                          }))}
-                        />
-                        <label className={styles.setting}>
-                          <span>Autoplay next episode</span>
-                          <input type="checkbox" checked={autoplayNext} onChange={onAutoplayNextChange} />
-                        </label>
-                        <button type="button" className={styles.help} onClick={onShowShortcuts}>
-                          Keyboard shortcuts
-                        </button>
-                      </Popover.Popup>
-                    </Popover.Root>
+                    <button
+                      className={`${styles.button} ${styles.autoplayButton}`}
+                      type="button"
+                      role="switch"
+                      aria-label="Autoplay next episode"
+                      aria-checked={autoplayNext}
+                      title={`Autoplay next episode: ${autoplayNext ? 'On' : 'Off'}`}
+                      onClick={onAutoplayNextChange}
+                    >
+                      <span className={styles.autoplayTrack} aria-hidden="true">
+                        <span className={styles.autoplayThumb}>
+                          <svg viewBox="0 0 12 12" fill="currentColor">
+                            {autoplayNext ? <path d="M4 2.5 9 6 4 9.5Z" /> : <path d="M3 3h2v6H3zm4 0h2v6H7z" />}
+                          </svg>
+                        </span>
+                      </span>
+                    </button>
+                    <PlayerSettings
+                      open={settingsOpen}
+                      onOpenChange={setSettingsOpen}
+                      audioTracks={audioTracks}
+                      selectedAudioTrack={selectedAudioTrack}
+                      onAudioChange={onAudioChange}
+                      subtitles={subtitles}
+                      selectedSubtitle={selectedSubtitle}
+                      onSubtitleChange={onSubtitleChange}
+                      playbackRate={playbackRate}
+                      onPlaybackRateChange={onPlaybackRateChange}
+                      autoplayNext={autoplayNext}
+                      onAutoplayNextChange={onAutoplayNextChange}
+                      streamLoading={streamLoading}
+                    />
                     <AirPlayButton className={styles.button} title="AirPlay">
                       <Icon name="airplay" />
                     </AirPlayButton>
+                    <PlayerCasting source={castSource} loading={streamLoading || Boolean(streamError)} />
                     <PiPButton className={`${styles.button} ${styles.pip}`} title="Picture in picture">
                       <Icon name="pip" />
                     </PiPButton>
@@ -298,23 +250,43 @@ export default function VideoJsPlayer({
                 </div>
               </Controls.Content>
             </Controls.Root>
-            <Hotkey keys="Space" action="togglePaused" target="document" disabled={shortcutsOpen} />
-            <Hotkey keys="k" action="togglePaused" target="document" disabled={shortcutsOpen} />
-            <Hotkey keys="m" action="toggleMuted" target="document" disabled={shortcutsOpen} />
-            <Hotkey keys="f" action="toggleFullscreen" target="document" disabled={shortcutsOpen} />
+            <Hotkey
+              keys="Space"
+              action="togglePaused"
+              target="document"
+              disabled={shortcutsOpen || settingsOpen}
+            />
+            <Hotkey
+              keys="k"
+              action="togglePaused"
+              target="document"
+              disabled={shortcutsOpen || settingsOpen}
+            />
+            <Hotkey
+              keys="m"
+              action="toggleMuted"
+              target="document"
+              disabled={shortcutsOpen || settingsOpen}
+            />
+            <Hotkey
+              keys="f"
+              action="toggleFullscreen"
+              target="document"
+              disabled={shortcutsOpen || settingsOpen}
+            />
             <Hotkey
               keys="ArrowLeft"
               action="seekStep"
               value={-10}
               target="document"
-              disabled={shortcutsOpen}
+              disabled={shortcutsOpen || settingsOpen}
             />
             <Hotkey
               keys="ArrowRight"
               action="seekStep"
               value={10}
               target="document"
-              disabled={shortcutsOpen}
+              disabled={shortcutsOpen || settingsOpen}
             />
             <Gesture type="tap" action="togglePaused" pointer="mouse" region="center" />
             <Gesture type="tap" action="toggleControls" pointer="touch" />

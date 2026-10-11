@@ -483,7 +483,9 @@ function createPlaybackRecovery({
   onReload,
   onReloadLimit,
   recoverStallInPlace = null,
+  isRemotePlayback = () => false,
 }) {
+  let wasRemotePlayback = false;
   let stallTimer = null;
   let watchdogTimer = null;
   let reloadBudgetResetTimer = null;
@@ -716,6 +718,17 @@ function createPlaybackRecovery({
   };
 
   const checkPlaybackHealth = () => {
+    if (isRemotePlayback()) {
+      wasRemotePlayback = true;
+      clearStallTimer();
+      markPlaybackProgress();
+      return;
+    }
+    if (wasRemotePlayback) {
+      wasRemotePlayback = false;
+      userPaused = video.paused;
+      markPlaybackProgress();
+    }
     if (!isActive() || !hasPlayed || userPaused || video.ended || video.seeking || document.hidden) {
       markPlaybackProgress();
       return;
@@ -1081,10 +1094,22 @@ export default function WatchPage() {
   const router = useRouter();
   const notify = useToast();
   const videoRef = useRef(null);
+  const playerStoreRef = useRef(null);
+  const [castSource, setCastSource] = useState('');
+  const isCasting = useCallback(() => {
+    const state = playerStoreRef.current?.state.remotePlaybackState;
+    return state === 'connected' || state === 'connecting';
+  }, []);
+  const playbackSnapshot = useCallback(() => (
+    isCasting() ? playerStoreRef.current.state : videoRef.current
+  ), [isCasting]);
   const hlsRef = useRef(null);
   const saveInterval = useRef(null);
   const streamRunRef = useRef(0);
   const playbackResumeTimeRef = useRef(0);
+  // The stream pipeline starts playback explicitly. A native autoPlay attribute
+  // would override the user's pause when a track change replaces the source.
+  const playOnStreamReadyRef = useRef(true);
   const automaticStreamReloadsRef = useRef(0);
   const [anime, setAnime] = useState(null);
   const [currentEp, setCurrentEp] = useState(null);
@@ -1195,11 +1220,11 @@ export default function WatchPage() {
   }
 
   const rememberCurrentPlaybackPosition = useCallback(() => {
-    const currentTime = Number(videoRef.current?.currentTime);
+    const currentTime = Number(playbackSnapshot()?.currentTime);
     if (Number.isFinite(currentTime) && currentTime > 0) {
       playbackResumeTimeRef.current = currentTime;
     }
-  }, []);
+  }, [playbackSnapshot]);
 
   const retryPlayback = useCallback(() => {
     rememberCurrentPlaybackPosition();
@@ -1217,6 +1242,7 @@ export default function WatchPage() {
       ended: videoRef.current?.ended ?? null,
     });
     automaticStreamReloadsRef.current = 0;
+    playOnStreamReadyRef.current = true;
     setStreamError(null);
     setStreamReloadKey(value => value + 1);
   }, [animeId, currentEp, rememberCurrentPlaybackPosition]);
@@ -1260,6 +1286,7 @@ export default function WatchPage() {
     setSubtitles([]);
     playbackResumeTimeRef.current = 0;
     automaticStreamReloadsRef.current = 0;
+    playOnStreamReadyRef.current = true;
 
     async function load() {
       try {
@@ -1367,6 +1394,7 @@ export default function WatchPage() {
       && !abortController.signal.aborted;
 
     teardownPlayer(ownedVideo);
+    setCastSource('');
     setStreamError(null);
     setStreamLoading(true);
 
@@ -1494,6 +1522,10 @@ export default function WatchPage() {
           deviceId: data.deviceId,
         });
 
+        // A MediaSource blob is private to this browser. The receiver fetches
+        // the signed HTTP stream (and its signed segments) directly instead.
+        setCastSource(new URL(hlsUrl || data.directUrl, window.location.href).href);
+
         const handleStreamReload = () => {
           setStreamLoading(true);
           setStreamReloadKey(value => value + 1);
@@ -1515,7 +1547,8 @@ export default function WatchPage() {
         if (!Hls.isSupported() && video.canPlayType('application/vnd.apple.mpegurl')) {
           const recovery = createPlaybackRecovery({
             video,
-            isActive,
+            isActive: () => isActive() && !isCasting(),
+            isRemotePlayback: isCasting,
             reportPlayerEvent,
             streamLogContext,
             playerContext: { player: 'native-hls' },
@@ -1537,7 +1570,7 @@ export default function WatchPage() {
             ...streamLogContext,
             player: 'native-hls',
           });
-          if (isActive()) {
+          if (isActive() && playOnStreamReadyRef.current) {
             video.play().catch(() => {});
           }
           return;
@@ -1566,7 +1599,8 @@ export default function WatchPage() {
           let networkRecoveryAttempts = 0;
           const recovery = createPlaybackRecovery({
             video,
-            isActive,
+            isActive: () => isActive() && !isCasting(),
+            isRemotePlayback: isCasting,
             reportPlayerEvent,
             streamLogContext,
             automaticStreamReloadsRef,
@@ -1606,7 +1640,7 @@ export default function WatchPage() {
               hlsAutoLevelEnabled: hls.autoLevelEnabled,
             });
             restorePlaybackPosition();
-            video.play().catch(() => {});
+            if (playOnStreamReadyRef.current) video.play().catch(() => {});
           });
 
           hls.on(Hls.Events.FRAG_LOADED, () => {
@@ -1615,7 +1649,7 @@ export default function WatchPage() {
           });
 
           hls.on(Hls.Events.ERROR, (event, errorData) => {
-            if (!isActive()) return;
+            if (!isActive() || isCasting()) return;
 
             const hlsErrorContext = {
               ...streamLogContext,
@@ -1708,7 +1742,7 @@ export default function WatchPage() {
           video.src = data.directUrl;
           applySubtitleSelection(video, isBurnedInStream ? 'off' : initialSubtitle);
           reportPlayerEvent('direct-video-start', streamLogContext);
-          if (isActive()) {
+          if (isActive() && playOnStreamReadyRef.current) {
             video.play().catch(() => {});
           }
         } else {
@@ -1745,13 +1779,18 @@ export default function WatchPage() {
       active = false;
       abortController.abort();
       rememberCurrentPlaybackPosition();
+      const finalPlayback = playbackSnapshot();
       persistWatchProgress({
         episodeId: currentEp.id,
         animeId,
-        currentTime: Number(ownedVideo?.currentTime),
-        duration: ownedVideo?.duration || 0,
+        currentTime: Number(finalPlayback?.currentTime),
+        duration: finalPlayback?.duration || 0,
         useBeacon: true,
       });
+      // This stream's Jellyfin session ends below, so stop its receiver too.
+      if (isCasting()) {
+        window.cast?.framework?.CastContext.getInstance().endCurrentSession(true);
+      }
       removeVideoRecoveryListeners();
       stopPlaybackKeepAlive();
       teardownPlayer(ownedVideo);
@@ -1766,7 +1805,7 @@ export default function WatchPage() {
   }, [selectedSubtitle, subtitleMode]);
 
   function handleSubtitleChange(nextSubtitle) {
-    if (streamLoading) return;
+    if (streamLoading || isCasting()) return;
 
     rememberCurrentPlaybackPosition();
 
@@ -1777,6 +1816,9 @@ export default function WatchPage() {
         ? 'burned'
         : 'soft';
 
+    if (nextMode !== subtitleMode || (nextMode === 'burned' && nextSubtitle !== selectedSubtitle)) {
+      playOnStreamReadyRef.current = !videoRef.current?.paused;
+    }
     setSelectedSubtitle(nextSubtitle);
     if (nextSubtitle === 'off') {
       setSubtitleMode('soft');
@@ -1789,9 +1831,10 @@ export default function WatchPage() {
   }
 
   function handleAudioTrackChange(nextAudioTrack) {
-    if (streamLoading) return;
+    if (streamLoading || isCasting()) return;
 
     rememberCurrentPlaybackPosition();
+    playOnStreamReadyRef.current = !videoRef.current?.paused;
     setSelectedAudioTrack(nextAudioTrack);
 
     if (nextAudioTrack === 'default') {
@@ -1824,7 +1867,7 @@ export default function WatchPage() {
   }
 
   const saveProgress = useCallback(async (options) => {
-    const video = videoRef.current;
+    const video = playbackSnapshot();
     if (!video || !currentEp) return;
     persistWatchProgress({
       episodeId: currentEp.id,
@@ -1833,7 +1876,7 @@ export default function WatchPage() {
       duration: video.duration || 0,
       useBeacon: options?.useBeacon === true,
     });
-  }, [currentEp, animeId]);
+  }, [currentEp, animeId, playbackSnapshot]);
 
   async function handleCopyMpvCommand() {
     if (!currentEp) return;
@@ -1960,6 +2003,8 @@ export default function WatchPage() {
         <div className="video-container">
           <VideoJsPlayer
             videoRef={videoRef}
+            playerStoreRef={playerStoreRef}
+            castSource={castSource}
             title={`${anime.title} · Episode ${currentEp.episode_number}`}
             audioTracks={audioTracks}
             selectedAudioTrack={selectedAudioTrack}
@@ -1971,16 +2016,15 @@ export default function WatchPage() {
             onPlaybackRateChange={handlePlaybackRateChange}
             autoplayNext={autoplayNext}
             onAutoplayNextChange={toggleAutoplayNext}
-            onShowShortcuts={() => setShowShortcutHelp(true)}
             shortcutsOpen={showShortcutHelp}
             onNextEpisode={nextEp ? () => { saveProgress(); router.push(`/watch/${animeId}/${nextEp.episode_number}`); } : undefined}
             streamLoading={streamLoading}
             streamError={streamError}
             onRetry={retryPlayback}
-            autoPlay
+            onPlay={() => { playOnStreamReadyRef.current = true; }}
             onLoadedMetadata={applyPlayerPreferences}
-            onVolumeChange={event => writePlayerSetting(PLAYER_VOLUME_KEY, event.currentTarget.volume)}
-            onRateChange={event => setPlaybackRate(event.currentTarget.playbackRate)}
+            onVolumeChange={() => writePlayerSetting(PLAYER_VOLUME_KEY, playbackSnapshot()?.volume ?? 1)}
+            onRateChange={() => setPlaybackRate(playbackSnapshot()?.playbackRate ?? 1)}
             onEnded={() => { saveProgress(); if (autoplayNext && nextEp) router.push(`/watch/${animeId}/${nextEp.episode_number}`); }}
             onPause={saveProgress}
           />

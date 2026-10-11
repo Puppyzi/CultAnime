@@ -3,7 +3,7 @@ import path from 'node:path';
 
 const fixtureDir = fileURLToPath(new URL('../fixtures/player/', import.meta.url));
 
-export async function preparePlayer(page, { failInitially = false } = {}) {
+export async function preparePlayer(page, { failInitially = false, castSource = false } = {}) {
   const streams = [];
   const history = [];
   const sessions = [];
@@ -57,7 +57,7 @@ export async function preparePlayer(page, { failInitially = false } = {}) {
     const burned = url.searchParams.get('subtitleMode') === 'burned';
     return route.fulfill({
       json: {
-        hlsUrl: '/player-fixture/playlist.m3u8',
+        hlsUrl: castSource ? 'https://media.example.test/player-fixture/playlist.m3u8' : '/player-fixture/playlist.m3u8',
         directUrl: null,
         streamSessionId: `session-${streams.length}`,
         deviceId: 'test-device',
