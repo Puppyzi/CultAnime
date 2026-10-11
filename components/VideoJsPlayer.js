@@ -18,6 +18,7 @@ import {
   TimeSlider,
   VolumeSlider,
 } from '@videojs/react';
+import { SeekIcon } from '@videojs/react/icons';
 import PlayerSettings from './PlayerSettings';
 import PlayerCasting, { PlayerStoreBridge } from './PlayerCasting';
 import { Video, VideoPlayer } from '@videojs/react/video';
@@ -164,14 +165,18 @@ export default function VideoJsPlayer({
                       seconds={-10}
                       title="Back 10 seconds"
                     >
-                      ↶<small>10</small>
+                      <svg viewBox="0 0 18 18" fill="currentColor" aria-hidden="true">
+                        <path d="M9 1a7.98 7.98 0 0 0-6.132 2.867l-1.441-1.44A.25.25 0 0 0 1 2.604V6.75c0 .138.112.25.25.25h4.146a.25.25 0 0 0 .177-.427L4.29 5.29A5.99 5.99 0 0 1 9 3a6 6 0 0 1 4.242 10.242l1.415 1.415A8 8 0 0 0 9 1" />
+                      </svg>
+                      <small aria-hidden="true">10</small>
                     </SeekButton>
                     <SeekButton
                       className={`${styles.button} ${styles.seek}`}
                       seconds={10}
                       title="Forward 10 seconds"
                     >
-                      ↷<small>10</small>
+                      <SeekIcon />
+                      <small aria-hidden="true">10</small>
                     </SeekButton>
                     <MuteButton
                       className={styles.button}

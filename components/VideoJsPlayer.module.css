@@ -130,9 +130,7 @@
   cursor: default;
 }
 .seek {
-  font-size: 30px;
   line-height: 1;
-  padding-bottom: 12px;
 }
 .seek small {
   position: absolute;
@@ -140,6 +138,7 @@
   left: 0;
   width: 100%;
   font-size: 9px;
+  font-family: Arial, sans-serif;
   text-align: center;
 }
 .spacer {
