@@ -3,7 +3,10 @@ import path from 'node:path';
 
 const fixtureDir = fileURLToPath(new URL('../fixtures/player/', import.meta.url));
 
-export async function preparePlayer(page, { failInitially = false, castSource = false } = {}) {
+export async function preparePlayer(
+  page,
+  { failInitially = false, castSource = false, longSubtitleLabels = false } = {}
+) {
   const streams = [];
   const history = [];
   const sessions = [];
@@ -57,7 +60,9 @@ export async function preparePlayer(page, { failInitially = false, castSource = 
     const burned = url.searchParams.get('subtitleMode') === 'burned';
     return route.fulfill({
       json: {
-        hlsUrl: castSource ? 'https://media.example.test/player-fixture/playlist.m3u8' : '/player-fixture/playlist.m3u8',
+        hlsUrl: castSource
+          ? 'https://media.example.test/player-fixture/playlist.m3u8'
+          : '/player-fixture/playlist.m3u8',
         directUrl: null,
         streamSessionId: `session-${streams.length}`,
         deviceId: 'test-device',
@@ -84,7 +89,12 @@ export async function preparePlayer(page, { failInitially = false, castSource = 
             codec: 'ass',
             url: '/player-fixture/styled.vtt',
           },
-        ],
+        ].map((track) => ({
+          ...track,
+          title: longSubtitleLabels
+            ? track.title + ' - Full Subtitles [9volt] - Default - Forced - ASS'
+            : track.title,
+        })),
       },
     });
   });

@@ -281,25 +281,53 @@ test('supports seeking, mute, volume and help without triggering playback shortc
   expect(state.errors).toEqual([]);
 });
 
-test('wrapped subtitle options scroll within the settings popup', async ({ page }) => {
-  await preparePlayer(page);
-  await openPlayer(page);
-  await openSettings(page);
-  await page.getByRole('menuitem', { name: 'Subtitles', exact: true }).click();
-  const menu = page.getByRole('menu', { name: 'Subtitles', exact: true });
-  await menu.evaluate((element) => {
-    for (const label of element.querySelectorAll('[role=menuitemradio] > span:first-child')) {
-      label.textContent = 'Full Subtitles [9volt] - English - Default - Forced - ASS';
+for (const viewport of [
+  { width: 1280, height: 720 },
+  { width: 390, height: 844 },
+]) {
+  test(
+    'wrapped subtitle options scroll within the settings popup (' + viewport.width + 'px)',
+    async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await preparePlayer(page, { longSubtitleLabels: true });
+      await openPlayer(page);
+      await openSettings(page);
+      await page.getByRole('menuitem', { name: 'Subtitles', exact: true }).click();
+      const menu = page.getByRole('menu', { name: 'Subtitles', exact: true });
+      // Wait for the submenu entrance and popup sizing before scrolling. Resizing
+      // during the transition can clamp scrollTop back toward zero.
+      await expect(menu).toHaveCSS('translate', '0px');
+      await menu.evaluate(async (element) => {
+        await Promise.all(
+          element.parentElement.getAnimations({ subtree: true }).map((animation) => animation.finished)
+        );
+      });
+      await expect
+        .poll(() =>
+          menu.evaluate((element) => {
+            const popup = element.parentElement.getBoundingClientRect();
+            const bounds = element.getBoundingClientRect();
+            return bounds.top >= popup.top && bounds.bottom <= popup.bottom + 1;
+          })
+        )
+        .toBe(true);
+      expect(await menu.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+      await menu.evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+      await expect
+        .poll(() =>
+          menu.evaluate((element) => {
+            const last = element.querySelector('[role=menuitemradio]:last-child').getBoundingClientRect();
+            const bounds = element.getBoundingClientRect();
+            return element.scrollTop > 0 && last.bottom <= bounds.bottom + 1 && last.top >= bounds.top;
+          })
+        )
+        .toBe(true);
+      await menu.getByRole('menuitemradio').last().click();
+      await expect(page.getByRole('menuitem', { name: 'Subtitles', exact: true })).toContainText(
+        'English styled'
+      );
     }
-  });
-  await expect.poll(() => menu.evaluate((element) => {
-    const popup = element.parentElement.getBoundingClientRect();
-    return element.getBoundingClientRect().bottom <= popup.bottom + 1;
-  })).toBe(true);
-  await menu.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-  await expect.poll(() => menu.evaluate((element) => {
-    const last = element.querySelector('[role=menuitemradio]:last-child').getBoundingClientRect();
-    const viewport = element.getBoundingClientRect();
-    return last.bottom <= viewport.bottom + 1 && last.top >= viewport.top;
-  })).toBe(true);
-});
+  );
+}
