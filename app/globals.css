@@ -4138,3 +4138,99 @@ textarea.form-input {
 .shortcut-help dl div { display: flex; justify-content: space-between; gap: 2rem; }
 .shortcut-help dt { font-weight: 700; color: var(--text-primary); }
 .shortcut-help dd { margin: 0; color: var(--text-secondary); }
+
+/* Available seasons share one detail view while retaining their own metadata. */
+.season-selector {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  margin: 1.5rem 0 1rem;
+  z-index: 5;
+}
+.season-selector-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border: 0;
+  padding: 0.6rem 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.season-selector-chevron {
+  display: inline-block;
+  transition: transform 0.15s;
+}
+.season-selector-chevron.open {
+  transform: rotate(180deg);
+}
+.season-selector-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: max-content;
+  min-width: 264.6px;
+  max-width: min(491.4px, calc(100vw - 3rem));
+  max-height: 302.4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.354375rem;
+  background: #252525;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 36px #0008;
+}
+.season-selector-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.18125rem;
+  width: 100%;
+  border: 0;
+  border-radius: 4px;
+  padding: 0.567rem 0.590625rem;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.season-selector-option > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.season-selector-option.active {
+  color: var(--text-primary);
+  background: #ffffff08;
+}
+.season-selector-option:hover,
+.season-selector-option:focus-visible {
+  background: #ffffff12;
+  color: var(--text-primary);
+}
+.season-selector-trigger:focus-visible,
+.season-selector-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.season-selector-count {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .season-selector-menu {
+    min-width: min(264.6px, calc(100vw - 3rem));
+  }
+}
+
+.episode-air-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  vertical-align: middle;
+}

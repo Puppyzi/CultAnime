@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { queryAnimeSeries, readAnimeSeriesRows } from '../../../lib/anime-series';
 import { getDb } from '../../../lib/db';
 import { reconcileForRead } from '../../../lib/library-reconciler';
 
@@ -23,6 +24,10 @@ export async function GET(request) {
     const page = Number.isFinite(parsedPage) ? Math.max(1, parsedPage) : 1;
     const limit = Number.isFinite(parsedLimit) ? Math.min(100, Math.max(1, parsedLimit)) : 20;
     const offset = (page - 1) * limit;
+
+    if (searchParams.get('group') === 'series') {
+      return NextResponse.json(queryAnimeSeries(readAnimeSeriesRows(db), { search, genre, sort, order, page, limit }));
+    }
 
     let query = `
       SELECT

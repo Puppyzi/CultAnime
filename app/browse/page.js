@@ -50,6 +50,7 @@ function BrowseContent() {
       setLoading(true);
       setError('');
       const params = new URLSearchParams({
+        group: 'series',
         sort,
         order: sort === 'title' ? 'ASC' : 'DESC',
         limit: String(PAGE_SIZE),

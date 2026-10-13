@@ -36,7 +36,7 @@ const CARD_IMAGE_SIZES = '(max-width: 1024px) 40vw, 180px';
 export const AnimeCard = memo(function AnimeCard({ anime, inWatchlist = false, onWatchlistChange }) {
   const notify = useToast();
   const href = `/anime/${anime.id}`;
-  const watchHref = `/watch/${anime.id}/1`;
+  const watchHref = `/watch/${anime.id}/${anime.first_episode_number || 1}`;
   const router = useRouter();
   const { isFlipping, handleClick, handleMouseEnter } = useFlipNavigation(href);
   const formatLabel = mediaFormatLabel(anime.format);

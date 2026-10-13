@@ -1,10 +1,12 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { ErrorState, useToast } from '../../../components/Feedback';
 import { fetchJson } from '../../../lib/client-api';
-import { PlayIcon, StarIcon } from '../../../components/Icons';
+import { CalendarIcon, PlayIcon, StarIcon } from '../../../components/Icons';
+
+import SeasonSelector from '../../../components/SeasonSelector';
 
 const TICKS_PER_SECOND = 10000000;
 const EPISODE_SORT_STORAGE_KEY = 'cultanime:episode-sort';
@@ -34,8 +36,23 @@ function formatRuntime(ep) {
   return `${minutes}m`;
 }
 
-function episodeMetaText(ep) {
-  return [formatAirDate(ep.air_date), formatRuntime(ep)].filter(Boolean).join(' | ');
+function EpisodeMetadata({ episode }) {
+  const date = formatAirDate(episode.air_date);
+  const runtime = formatRuntime(episode);
+  if (!date && !runtime) return null;
+
+  return (
+    <span className="episode-meta">
+      {date && (
+        <span className="episode-air-date">
+          <CalendarIcon />
+          <time dateTime={episode.air_date}>{date}</time>
+        </span>
+      )}
+      {date && runtime && ' | '}
+      {runtime}
+    </span>
+  );
 }
 
 function episodeTotalFor(anime) {
@@ -297,11 +314,16 @@ function SeriesDownloadConfirm({ animeId }) {
   );
 }
 
-export default function AnimeDetailPage() {
+function AnimeDetailContent() {
   const { id } = useParams();
   const notify = useToast();
-  const [anime, setAnime] = useState(null);
-  const [inWatchlist, setInWatchlist] = useState(false);
+  const searchParams = useSearchParams();
+  const [data, setData] = useState(null);
+  const [watchlistIds, setWatchlistIds] = useState(() => new Set());
+  const selectedId = searchParams.get('season');
+  const anime = data?.seasons?.find(season => String(season.id) === selectedId)
+    || data?.seasons?.find(season => String(season.id) === String(id)) || data;
+  const inWatchlist = watchlistIds.has(anime?.id);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
@@ -323,11 +345,11 @@ export default function AnimeDetailPage() {
       setLoading(true);
       setLoadError('');
       try {
-        const data = await fetchJson(`/api/anime/${id}`, { signal: controller.signal });
-        setAnime(data);
+        const data = await fetchJson(`/api/anime/${id}?include=seasons`, { signal: controller.signal });
+        setData(data);
 
         const wlData = await fetchJson('/api/watchlist', { signal: controller.signal });
-        setInWatchlist(wlData.watchlist?.some(w => w.anime_id === parseInt(id) && !w.episode_id));
+        setWatchlistIds(new Set((wlData.watchlist || []).filter(w => !w.episode_id).map(w => w.anime_id)));
       } catch (error) {
         if (error.name !== 'AbortError') setLoadError(error.message);
       } finally {
@@ -342,7 +364,13 @@ export default function AnimeDetailPage() {
     watchlistRequestIdRef.current += 1;
     watchlistActionRef.current = false;
     setWatchlistBusy(false);
-  }, [id]);
+  }, [anime?.id]);
+
+  function selectSeason(seasonId) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('season', String(seasonId));
+    window.history.pushState(null, '', '?' + params.toString());
+  }
 
   function updateEpisodeSort(nextSort) {
     if (!EPISODE_SORT_OPTIONS.includes(nextSort)) return;
@@ -355,7 +383,7 @@ export default function AnimeDetailPage() {
     if (watchlistActionRef.current) return;
 
     const action = inWatchlist ? 'remove' : 'add';
-    const animeId = parseInt(id);
+    const animeId = anime.id;
     const requestId = watchlistRequestIdRef.current + 1;
     watchlistRequestIdRef.current = requestId;
     watchlistActionRef.current = true;
@@ -369,7 +397,11 @@ export default function AnimeDetailPage() {
       });
       if (watchlistRequestIdRef.current !== requestId) return;
 
-      setInWatchlist(action === 'add');
+      setWatchlistIds(current => {
+        const next = new Set(current);
+        if (action === 'add') next.add(animeId); else next.delete(animeId);
+        return next;
+      });
       notify(action === 'add' ? 'Added to Watchlist.' : 'Removed from Watchlist.', 'success');
     } catch (error) {
       if (watchlistRequestIdRef.current === requestId) {
@@ -416,7 +448,7 @@ export default function AnimeDetailPage() {
           <img className="anime-detail-cover" src={anime.cover_image} alt={anime.title} />
           <div className="anime-detail-actions">
             {anime.episodes?.length > 0 && (
-              <Link href={`/watch/${anime.id}/1`} className="btn btn-primary" style={{ justifyContent: 'center' }}>
+              <Link href={`/watch/${anime.id}/${anime.episodes[0].episode_number}`} className="btn btn-primary" style={{ justifyContent: 'center' }}>
                 <PlayIcon /> Start Watching
               </Link>
             )}
@@ -431,7 +463,7 @@ export default function AnimeDetailPage() {
               {watchlistBusy ? 'Updating...' : inWatchlist ? '✓ In Watchlist' : '+ Add to Watchlist'}
             </button>
             {anime.episodes?.length > 0 && (
-              <SeriesDownloadConfirm animeId={anime.id} />
+              <SeriesDownloadConfirm key={anime.id} animeId={anime.id} />
             )}
           </div>
         </div>
@@ -456,6 +488,10 @@ export default function AnimeDetailPage() {
 
           <p className="anime-detail-description">{anime.description}</p>
 
+          {data.seasons?.length > 0 && (
+            <SeasonSelector seasons={data.seasons} selectedId={anime.id} onChange={selectSeason} />
+          )}
+
           {anime.episodes?.length > 0 && (
             <div className="episode-list">
               <div className='episode-list-header'>
@@ -464,8 +500,6 @@ export default function AnimeDetailPage() {
               </div>
               <div className="episode-grid">
                 {displayedEpisodes.map(ep => {
-                  const meta = episodeMetaText(ep);
-
                   return (
                     <Link key={ep.id} href={`/watch/${anime.id}/${ep.episode_number}`} className="episode-item episode-detail-item">
                       <img
@@ -477,7 +511,7 @@ export default function AnimeDetailPage() {
                       <span className="episode-number">{ep.episode_number}</span>
                       <span className="episode-copy episode-detail-copy">
                         <span className="episode-title">{ep.title || `Episode ${ep.episode_number}`}</span>
-                        {meta && <span className="episode-meta">{meta}</span>}
+                        <EpisodeMetadata episode={ep} />
                         {ep.overview && <span className="episode-overview">{ep.overview}</span>}
                       </span>
                       <span className='episode-play-icon'><PlayIcon /></span>
@@ -498,4 +532,8 @@ export default function AnimeDetailPage() {
       </div>
     </div>
   );
+}
+
+export default function AnimeDetailPage() {
+  return <Suspense fallback={<div className="empty-state">Loading anime…</div>}><AnimeDetailContent /></Suspense>;
 }

@@ -135,3 +135,12 @@ export function FolderIcon(props) {
     </SvgIcon>
   );
 }
+
+export function CalendarIcon(props) {
+  return (
+    <SvgIcon fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect x="4" y="5" width="16" height="16" rx="1" />
+      <path d="M8 3v4m8-4v4M4 10h16" />
+    </SvgIcon>
+  );
+}

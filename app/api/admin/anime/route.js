@@ -4,7 +4,7 @@ import { getDb } from '../../../../lib/db';
 const UPDATABLE_COLUMNS = new Set([
   'title', 'title_romaji', 'title_english', 'description', 'cover_image',
   'banner_image', 'genres', 'status', 'episodes_total', 'rating', 'year',
-  'season', 'format', 'studios', 'anilist_id', 'jellyfin_id',
+  'season', 'format', 'studios', 'anilist_id', 'jellyfin_id', 'series_relations',
 ]);
 
 export async function POST(request) {
@@ -12,17 +12,17 @@ export async function POST(request) {
     const db = getDb();
     const body = await request.json();
     const { title, title_romaji, title_english, description, cover_image, banner_image,
-      genres, status, episodes_total, rating, year, season, format, studios, anilist_id } = body;
+      genres, status, episodes_total, rating, year, season, format, studios, anilist_id, series_relations } = body;
 
     const result = db.prepare(`
       INSERT INTO anime (title, title_romaji, title_english, description, cover_image, banner_image,
-        genres, status, episodes_total, rating, year, season, format, studios, anilist_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        genres, status, episodes_total, rating, year, season, format, studios, anilist_id, series_relations)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(title, title_romaji, title_english, description, cover_image, banner_image,
       typeof genres === 'string' ? genres : JSON.stringify(genres || []),
       status, episodes_total, rating, year, season, format,
       typeof studios === 'string' ? studios : JSON.stringify(studios || []),
-      anilist_id);
+      anilist_id, typeof series_relations === 'string' ? series_relations : JSON.stringify(series_relations || []));
 
     return NextResponse.json({ success: true, id: result.lastInsertRowid });
   } catch (error) {

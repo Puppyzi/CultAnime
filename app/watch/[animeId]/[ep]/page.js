@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import VideoJsPlayer from '../../../../components/VideoJsPlayer';
-import { InfoIcon, PlayIcon } from '../../../../components/Icons';
+import { CalendarIcon, InfoIcon, PlayIcon } from '../../../../components/Icons';
 import { ErrorState, useToast } from '../../../../components/Feedback';
 import { fetchJson } from '../../../../lib/client-api';
 import {
@@ -102,8 +102,23 @@ function formatEpisodeRuntime(seconds) {
   return `${Math.max(1, Math.round(Number(seconds) / 60))}m`;
 }
 
-function episodeMetaText(ep) {
-  return [formatEpisodeDate(ep.air_date), formatEpisodeRuntime(ep.duration)].filter(Boolean).join(' | ');
+function episodeMetadata(ep) {
+  const date = formatEpisodeDate(ep.air_date);
+  const runtime = formatEpisodeRuntime(ep.duration);
+  if (!date && !runtime) return null;
+
+  return (
+    <>
+      {date && (
+        <span className="episode-air-date">
+          <CalendarIcon />
+          <time dateTime={ep.air_date}>{date}</time>
+        </span>
+      )}
+      {date && runtime && ' | '}
+      {runtime}
+    </>
+  );
 }
 
 function episodeTotalFor(anime) {
@@ -1959,7 +1974,7 @@ export default function WatchPage() {
 
   const nextEp = anime?.episodes?.find(e => e.episode_number === episodeNum + 1);
   const prevEp = anime?.episodes?.find(e => e.episode_number === episodeNum - 1);
-  const currentEpMeta = currentEp ? episodeMetaText(currentEp) : '';
+  const currentEpMeta = currentEp ? episodeMetadata(currentEp) : '';
   const episodeTotal = episodeTotalFor(anime);
 
   if (loading) {
@@ -2103,7 +2118,7 @@ export default function WatchPage() {
         <h3>Episodes</h3>
         <div className="episode-grid" style={{ padding: '0' }}>
           {anime.episodes.map(e => {
-            const meta = episodeMetaText(e);
+            const meta = episodeMetadata(e);
 
             return (
             <Link key={e.id} href={`/watch/${animeId}/${e.episode_number}`}

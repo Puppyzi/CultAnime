@@ -52,9 +52,9 @@ function HeroCarousel({ heroAnime, history }) {
 
   const featured = heroAnime[featuredIndex] || heroAnime[0] || null;
   const featuredFormatLabel = featured ? mediaFormatLabel(featured.format) : '';
-  const featuredHistory = featured ? history.find(h => h.anime_id === featured.id) : null;
+  const featuredHistory = featured ? history.find(h => (featured.season_ids || [featured.id]).includes(h.anime_id)) : null;
   const featuredWatchHref = featured
-    ? `/watch/${featured.id}/${featuredHistory?.episode_number || 1}`
+    ? `/watch/${featuredHistory?.anime_id || featured.id}/${featuredHistory?.episode_number || featured.first_episode_number || 1}`
     : null;
   const canSwipeHero = heroAnime.length > 1;
 
@@ -163,7 +163,7 @@ function getHeroAnime(anime, history) {
   // the hero instead of filtering it down to a user's watch history.
   if (airingAnime.length === 0) return anime;
 
-  const animeById = new Map(anime.map(item => [String(item.id), item]));
+  const animeById = new Map(anime.flatMap(item => (item.season_ids || [item.id]).map(id => [String(id), item])));
   const watchedAnime = history
     .map(item => animeById.get(String(item.anime_id)))
     .filter(Boolean);
@@ -195,7 +195,7 @@ export default function HomePage() {
       setError('');
       try {
         const [animeData, historyData, watchlistData] = await Promise.all([
-          fetchJson('/api/anime?sort=created_at&order=DESC&limit=100', { signal: controller.signal }),
+          fetchJson('/api/anime?group=series&sort=created_at&order=DESC&limit=100', { signal: controller.signal }),
           fetchJson('/api/history', { signal: controller.signal }),
           fetchJson('/api/watchlist', { signal: controller.signal }),
         ]);

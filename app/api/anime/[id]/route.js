@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { groupAnimeSeries, readAnimeSeriesRows, jsonList } from '../../../../lib/anime-series';
 import { getDb } from '../../../../lib/db';
 import { reconcileForRead } from '../../../../lib/library-reconciler';
 import { getNextAiringEpisode } from '../../../../lib/anilist';
@@ -30,8 +31,21 @@ export async function GET(request, { params }) {
       }
     }
 
+    let seasons;
+    if (new URL(request.url).searchParams.get('include') === 'seasons') {
+      const series = groupAnimeSeries(readAnimeSeriesRows(db)).find(item => item.season_ids.includes(anime.id));
+      const readEpisodes = db.prepare('SELECT * FROM episodes WHERE anime_id = ? ORDER BY episode_number ASC');
+      seasons = (series?.seasons || []).map(member => ({
+        ...member,
+        genres: jsonList(member.genres),
+        studios: jsonList(member.studios),
+        episodes: member.id === anime.id ? episodes : sanitizeEpisodesForPublic(readEpisodes.all(member.id), member),
+      }));
+    }
+
     return NextResponse.json({
       ...anime,
+      ...(seasons ? { seasons } : {}),
       genres: JSON.parse(anime.genres || '[]'),
       studios: JSON.parse(anime.studios || '[]'),
       next_airing_episode: nextAiringEpisode,
