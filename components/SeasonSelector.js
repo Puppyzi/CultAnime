@@ -57,7 +57,9 @@ export default function SeasonSelector({ seasons, selectedId, onChange }) {
       className="season-selector"
       ref={rootRef}
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+        // Touch browsers can clear focus before dispatching an option's click.
+        // Outside taps are handled by pointerdown; only close here for a known focus destination.
+        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
       }}
     >
       <button

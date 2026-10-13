@@ -118,6 +118,40 @@ test('shows only season 3 and supports existing season URLs', async ({ page }) =
   await expect(page.getByRole('menuitemradio')).toHaveText('Season 31 Episode');
 });
 
+test.describe('touch season selection', () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
+
+  for (const losesFocus of [false, true]) {
+    test(`selects a season by tapping${losesFocus ? ' when touch clears focus' : ''}`, async ({ page }) => {
+      await fixture(page);
+      await page.goto('/anime/9001');
+      await page.getByRole('button', { name: 'Select season: Season 1', exact: true }).tap();
+      await expect(page.getByRole('menuitemradio').first()).toBeFocused();
+
+      if (losesFocus) {
+        // Reproduce browsers that blur the focused option without focusing the tapped button.
+        await page.getByRole('menu').evaluate((menu) => {
+          menu.addEventListener('pointerdown', () => document.activeElement.blur(), { once: true });
+        });
+      }
+
+      await page.getByRole('menuitemradio', { name: 'Season 3 1 Episode' }).tap();
+      await expect(page.getByRole('heading', { name: 'Example Season 3', exact: true })).toBeVisible();
+      await expect(page).toHaveURL(/season=9003/);
+      await expect(page.getByRole('menu')).toHaveCount(0);
+      await expect(page.locator('.episode-item')).toHaveAttribute('href', '/watch/9003/4');
+
+      const trigger = page.getByRole('button', { name: 'Select season: Season 3', exact: true });
+      await trigger.tap();
+      await page.getByRole('heading', { name: 'Example Season 3', exact: true }).tap();
+      await expect(page.getByRole('menu')).toHaveCount(0);
+      await trigger.tap();
+      await page.getByRole('menuitemradio', { name: 'Season 1 2 Episodes' }).tap();
+      await expect(page.getByRole('heading', { name: 'Example', exact: true })).toBeVisible();
+    });
+  }
+});
+
 test('homepage requests grouped cards and uses current artwork with an earliest-season link', async ({
   page,
 }) => {
