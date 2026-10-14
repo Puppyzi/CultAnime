@@ -1,4 +1,5 @@
 'use client';
+import EpisodeSkipEditor from '../../components/EpisodeSkipEditor';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -854,6 +855,7 @@ export default function AdminPage() {
                         </div>
 
                         {editingEpisodeId === ep.id && (
+                          <>
                           <form className="episode-metadata-form" onSubmit={saveEpisode}>
                             <div className="form-grid episode-metadata-grid">
                               <div className="form-group">
@@ -892,6 +894,8 @@ export default function AdminPage() {
                               <button type="button" className="btn btn-secondary btn-sm" onClick={cancelEditEpisode}>Cancel</button>
                             </div>
                           </form>
+                          <EpisodeSkipEditor key={ep.id} episodeId={ep.id} />
+                          </>
                         )}
                       </div>
                     ))}

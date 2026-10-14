@@ -164,6 +164,9 @@ export async function prepareCast(page) {
     };
     window.castTest = {
       loads,
+      get currentTime() {
+        return remote.currentTime;
+      },
       advance(time) {
         remote.currentTime = time;
         emit('CURRENT_TIME_CHANGED', time);

@@ -8,6 +8,7 @@ test('Cast uses the HTTP source, receiver progress and safe track controls', asy
   await page.goto('/watch/9001/1');
   const video = page.locator('video');
   await expect.poll(() => video.evaluate((el) => el.currentTime)).toBeGreaterThanOrEqual(7);
+  await expect.poll(() => video.evaluate((el) => el.paused)).toBe(false);
   await page.locator('[data-cultanime-player]').hover();
   const start = page.getByRole('button', { name: 'Start casting', exact: true });
   await expect(start).toHaveAttribute('title', 'Start casting');

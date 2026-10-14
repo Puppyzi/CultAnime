@@ -2017,6 +2017,7 @@ export default function WatchPage() {
       <div className="player-main">
         <div className="video-container">
           <VideoJsPlayer
+            episodeId={currentEp.id}
             videoRef={videoRef}
             playerStoreRef={playerStoreRef}
             castSource={castSource}

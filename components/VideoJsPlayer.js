@@ -20,6 +20,7 @@ import {
 } from '@videojs/react';
 import { SeekIcon } from '@videojs/react/icons';
 import PlayerSettings from './PlayerSettings';
+import PlayerSkipSegments from './PlayerSkipSegments';
 import PlayerCasting, { PlayerStoreBridge } from './PlayerCasting';
 import { Video, VideoPlayer } from '@videojs/react/video';
 import styles from './VideoJsPlayer.module.css';
@@ -75,6 +76,7 @@ function Icon({ name }) {
 // The watch page owns the media source and its single hls.js instance: Jellyfin
 // track changes negotiate new sessions and cannot use manifest-only track menus.
 export default function VideoJsPlayer({
+  episodeId,
   videoRef,
   playerStoreRef,
   castSource,
@@ -109,6 +111,12 @@ export default function VideoJsPlayer({
           preload="metadata"
           crossOrigin="anonymous"
           {...videoProps}
+        />
+        <PlayerSkipSegments
+          key={episodeId}
+          episodeId={episodeId}
+          ready={!streamLoading}
+          hidden={streamLoading || Boolean(streamError) || settingsOpen || shortcutsOpen}
         />
         {streamError ? (
           <div className={styles.error} role="alert">

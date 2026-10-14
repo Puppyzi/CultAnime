@@ -70,6 +70,8 @@ Request search and submit are anime-gated. By default, CultAnime only allows TV/
 
 For production, run CultAnime on the server that can reach Jellyfin, Seerr, SQLite storage, and the anime media mount. The included Docker files and production env example are the expected deployment path.
 
+Episode-specific **Skip Intro** and **Skip Credits** controls use Jellyfin media segments. Automatic detection requires a compatible segment provider; admins can also correct times or disable skips per episode. See [episode skipping setup and behavior](docs/episode-skipping.md).
+
 ## Health checks and database backups
 
 `GET /api/health` is a fast readiness check for the application and SQLite database. `GET /api/health?deep=1` also reports whether configured Jellyfin and Seerr services are reachable; external-service failures report a degraded state without making the CultAnime container unhealthy. Docker and Compose use the fast readiness check automatically.

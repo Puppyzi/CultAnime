@@ -5,7 +5,7 @@ const fixtureDir = fileURLToPath(new URL('../fixtures/player/', import.meta.url)
 
 export async function preparePlayer(
   page,
-  { failInitially = false, castSource = false, longSubtitleLabels = false } = {}
+  { failInitially = false, castSource = false, longSubtitleLabels = false, skipSegments = [] } = {}
 ) {
   const streams = [];
   const history = [];
@@ -14,6 +14,10 @@ export async function preparePlayer(
   const errors = [];
   let fail = failInitially;
   page.on('pageerror', (error) => errors.push(error.message));
+  await page.route('**/api/episodes/*/segments', route => {
+    const episodeId = Number(new URL(route.request().url()).pathname.split('/')[3]);
+    return route.fulfill({ json: { episodeId, segments: episodeId === 9101 ? skipSegments : [] } });
+  });
   await page.addInitScript(() => {
     localStorage.setItem('cultanime.playerVolume', '0.4');
     localStorage.setItem('cultanime.audioTrack.9001', '0');
