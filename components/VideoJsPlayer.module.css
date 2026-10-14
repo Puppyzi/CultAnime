@@ -4,6 +4,40 @@
   color: rgb(255 255 255 / 75%);
 }
 
+.skipSegment {
+  position: absolute;
+  overflow: hidden;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: 6rem;
+  z-index: 2;
+  min-height: 44px;
+  max-width: calc(100% - 2rem);
+  padding: 0.65rem 1rem;
+  border: 1px solid #ffffff80;
+  border-radius: 6px;
+  background: #181818e6;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.skipSegmentFill {
+  position: absolute;
+  inset: 0;
+  background: #ffffff38;
+  transform: scaleX(var(--skip-progress, 0));
+  transform-origin: left;
+  pointer-events: none;
+}
+.skipSegmentLabel { position: relative; }
+@media (prefers-reduced-motion: reduce) {
+  .skipSegmentFill { transform: scaleX(var(--skip-progress, 0)) !important; }
+}
+.skipSegment:hover { background: #333; }
+.skipSegment:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+.skipSegment:disabled { opacity: 0.6; cursor: wait; }
+
 .player {
   position: relative;
   width: 100%;

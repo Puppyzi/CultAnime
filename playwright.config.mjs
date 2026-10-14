@@ -12,5 +12,13 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'mobile-webkit',
+      testMatch: 'skip-segments.spec.js',
+      grep: /mobile skipping|eight-second prompts/,
+      use: { ...devices['iPhone 13'] },
+    },
+  ],
 });
