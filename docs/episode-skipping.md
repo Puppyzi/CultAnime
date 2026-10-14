@@ -47,7 +47,7 @@ An unsuccessful scan remains **unknown**, not confirmed absence. Overrides are r
 
 ## Validation
 
-Automated coverage includes boundary validation, empty and failed detection, delayed openings, durable overrides, file replacement conflicts, admin authentication, touch activation, keyboard activation, paused seeking, post-credit scenes, episode transitions, late responses, and Google Cast seeking. Browser playback uses synthetic segments so tests do not need to scan the real library. The admin UI browser test requires the development server's configured `ADMIN_PASSWORD`; it mocks all episode writes.
+Automated coverage includes boundary validation, empty and failed detection, delayed openings, durable overrides, file replacement conflicts, admin authentication, touch activation, keyboard activation, paused seeking, post-credit scenes, episode transitions, late responses, and Google Cast seeking. Browser playback uses synthetic segments so tests do not need to scan the real library. The admin UI browser test logs in through `/api/admin/auth` using the development server's configured `ADMIN_PASSWORD`; it mocks all episode writes. CI provides a test-only password and installs both Chromium and WebKit.
 
 Install test browsers with `npx playwright install chromium webkit`. `npm run test:e2e` includes the mobile skip test in WebKit with an iPhone viewport and touch input, alongside the Chromium suite. Run that check alone with `npm run test:e2e -- --project mobile-webkit`.
 

@@ -21,6 +21,9 @@ jobs:
 
   smoke:
     runs-on: ubuntu-latest
+    env:
+      # Only used by the temporary development server in this CI job.
+      ADMIN_PASSWORD: cultanime-ci-test-password
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,5 +31,5 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e

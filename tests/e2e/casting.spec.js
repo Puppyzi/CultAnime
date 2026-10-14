@@ -7,9 +7,14 @@ test('Cast uses the HTTP source, receiver progress and safe track controls', asy
   const state = await preparePlayer(page, { castSource: true });
   await page.goto('/watch/9001/1');
   const video = page.locator('video');
+  await expect.poll(() => video.evaluate((el) => el.readyState)).toBeGreaterThanOrEqual(2);
   await expect.poll(() => video.evaluate((el) => el.currentTime)).toBeGreaterThanOrEqual(7);
-  await expect.poll(() => video.evaluate((el) => el.paused)).toBe(false);
   await page.locator('[data-cultanime-player]').hover();
+  // A fresh CI browser may block unmuted autoplay until a user gesture.
+  if (await video.evaluate((el) => el.paused)) {
+    await page.getByRole('button', { name: 'Play', exact: true }).click();
+  }
+  await expect.poll(() => video.evaluate((el) => el.paused)).toBe(false);
   const start = page.getByRole('button', { name: 'Start casting', exact: true });
   await expect(start).toHaveAttribute('title', 'Start casting');
   await start.click();

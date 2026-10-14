@@ -1,17 +1,18 @@
 import { expect, test } from '@playwright/test';
 import nextEnv from '@next/env';
-import { ADMIN_COOKIE_NAME, createAdminSessionToken } from '../../lib/admin-auth';
 
 nextEnv.loadEnvConfig(process.cwd(), true, { info() {}, error() {} });
 
 test('admin can correct, disable, and refresh episode skip settings on mobile', async ({
   page,
   context,
-  baseURL,
 }) => {
-  const token = await createAdminSessionToken();
-  test.skip(!token, 'Requires a configured ADMIN_PASSWORD for the local admin page.');
-  await context.addCookies([{ name: ADMIN_COOKIE_NAME, value: token, url: baseURL }]);
+  const password = process.env.ADMIN_PASSWORD;
+  test.skip(!password, 'Requires a configured ADMIN_PASSWORD for the local admin page.');
+  // Authenticate through Next.js so Node does not import application modules
+  // directly. The context request shares its session cookies with the page.
+  const login = await context.request.post('/api/admin/auth', { data: { password } });
+  expect(login.ok()).toBe(true);
   await page.setViewportSize({ width: 390, height: 844 });
   const anime = {
     id: 9001,
