@@ -20,7 +20,24 @@ async function pausedPlayer(page) {
   }
   await expect.poll(() => video.evaluate((el) => el.paused)).toBe(false);
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await expect.poll(() => video.evaluate((el) => el.paused)).toBe(true);
   return video;
+}
+
+async function expectSettledAt(video, seconds) {
+  // currentTime changes before decoding/seeked finishes. Starting another seek
+  // at that point can interrupt the first one, especially on Linux WebKit.
+  await expect.poll(() => video.evaluate((el) => ({
+    time: Math.round(el.currentTime * 10) / 10,
+    seeking: el.seeking,
+    ready: el.readyState >= 2,
+    paused: el.paused,
+  }))).toEqual({ time: seconds, seeking: false, ready: true, paused: true });
+}
+
+async function seekPausedVideo(video, seconds) {
+  await video.evaluate((el, time) => { el.currentTime = time; }, seconds);
+  await expectSettledAt(video, seconds);
 }
 
 test('skip buttons seek within the episode, preserve pause, and return after seeking backwards', async ({
@@ -51,7 +68,7 @@ test('skip buttons seek within the episode, preserve pause, and return after see
 });
 
 test('eight-second prompts fill with playback, expire, and return only inside their original window', async ({ page }) => {
-  await preparePlayer(page, {
+  const state = await preparePlayer(page, {
     skipSegments: [
       { type: 'intro', start: 6, end: 16 },
       { type: 'outro', start: 18, end: 29 },
@@ -60,49 +77,50 @@ test('eight-second prompts fill with playback, expire, and return only inside th
   const video = await pausedPlayer(page);
   const intro = page.getByRole('button', { name: 'Skip Intro', exact: true });
   const credits = page.getByRole('button', { name: 'Skip Credits', exact: true });
-  await video.evaluate((el) => { el.currentTime = 10; });
+  await seekPausedVideo(video, 10);
   await expect(intro).toBeVisible();
   await expect.poll(() => intro.evaluate((el) => Number(el.style.getPropertyValue('--skip-progress')))).toBeCloseTo(0.5, 2);
   const fill = intro.locator('[aria-hidden="true"]');
   await expect.poll(() => fill.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).a)).toBeCloseTo(0.5, 2);
   await page.locator('[data-cultanime-player]').hover();
   await page.getByRole('button', { name: 'Play', exact: true }).click();
-  const samples = await fill.evaluate((el) => new Promise((resolve) => {
-    const values = [];
-    const started = performance.now();
-    function sample(now) {
-      values.push(new DOMMatrix(getComputedStyle(el).transform).a);
-      if (now - started < 500) requestAnimationFrame(sample);
-      else resolve(values);
-    }
-    requestAnimationFrame(sample);
-  }));
-  expect(new Set(samples.map((value) => value.toFixed(4))).size).toBeGreaterThan(8);
-  expect(samples.at(-1)).toBeGreaterThan(samples[0]);
+  // Rendering cadence varies on CI, especially Linux WebKit. Verify continuous
+  // animation and actual forward progress without requiring a minimum FPS.
+  await expect.poll(() => fill.evaluate((el) => {
+    const animation = el.getAnimations()[0];
+    return animation && {
+      state: animation.playState,
+      duration: animation.effect.getTiming().duration,
+      easing: animation.effect.getTiming().easing,
+    };
+  })).toEqual({ state: 'running', duration: 8000, easing: 'linear' });
+  await expect.poll(() => fill.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).a))
+    .toBeGreaterThan(0.55);
   await expect(intro).toHaveCount(0, { timeout: 8000 });
   const expiredAt = await video.evaluate((el) => el.currentTime);
   expect(expiredAt).toBeGreaterThanOrEqual(14);
   expect(expiredAt).toBeLessThan(16);
   await page.locator('[data-cultanime-player]').hover();
   await page.getByRole('button', { name: 'Pause', exact: true }).click();
+  await expect.poll(() => video.evaluate((el) => el.paused)).toBe(true);
 
-  await video.evaluate((el) => { el.currentTime = 14; });
-  await expect.poll(() => video.evaluate((el) => el.seeking)).toBe(false);
+  await seekPausedVideo(video, 14);
   await expect(intro).toHaveCount(0);
-  await video.evaluate((el) => { el.currentTime = 8; });
+  await seekPausedVideo(video, 8);
   await expect(intro).toBeEnabled();
   await intro.click();
-  await expect.poll(() => video.evaluate((el) => el.currentTime)).toBeCloseTo(16, 0);
+  await expectSettledAt(video, 16);
 
-  await video.evaluate((el) => { el.currentTime = 26; });
-  await expect.poll(() => video.evaluate((el) => el.seeking)).toBe(false);
+  await seekPausedVideo(video, 26);
   await expect(credits).toHaveCount(0);
-  await video.evaluate((el) => { el.currentTime = 22; });
+  await seekPausedVideo(video, 22);
   await expect(credits).toBeEnabled();
   await expect.poll(() => credits.evaluate((el) => Number(el.style.getPropertyValue('--skip-progress')))).toBeCloseTo(0.5, 2);
   await credits.click();
-  await expect.poll(() => video.evaluate((el) => el.currentTime)).toBeCloseTo(29, 0);
-  expect(await video.evaluate((el) => el.paused)).toBe(true);
+  await expectSettledAt(video, 29);
+  expect(state.streams).toHaveLength(1);
+  expect(state.events.filter((event) => /media-error|hls-fatal-error|stream-reload/.test(event?.event))).toEqual([]);
+  expect(state.errors).toEqual([]);
 });
 
 test.describe('mobile skipping', () => {
